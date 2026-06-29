@@ -844,6 +844,9 @@ export function useShopController() {
         updateHomeHero('imageUrl', imageUrl);
       } else if (target.startsWith('component.')) {
         updateHomeComponentForm(target.replace('component.', ''), imageUrl);
+      } else if (target.startsWith('sectionItem.')) {
+        const [, sectionId, itemIndex, field] = target.split('.');
+        updateHomeSectionItem(sectionId, Number(itemIndex), field, imageUrl);
       } else if (target.startsWith('section.')) {
         const [, sectionId, field] = target.split('.');
         updateHomeSection(sectionId, field, imageUrl);
@@ -883,6 +886,44 @@ export function useShopController() {
       sections: current.sections.map((section) => (
         section.id === sectionId ? { ...section, [field]: value } : section
       )),
+    }));
+  };
+
+  const updateHomeSectionItem = (sectionId, itemIndex, field, value) => {
+    saveHomeContent((current) => ({
+      ...current,
+      sections: current.sections.map((section) => {
+        if (section.id !== sectionId) return section;
+        const items = [...(Array.isArray(section.items) ? section.items : [])];
+        items[itemIndex] = {
+          title: '',
+          body: '',
+          imageUrl: '',
+          linkUrl: '',
+          ...(items[itemIndex] || {}),
+          [field]: value,
+        };
+        return { ...section, items };
+      }),
+    }));
+  };
+
+  const toggleHomeSectionProduct = (sectionId, product) => {
+    const productId = getProductId(product);
+    if (!productId) return;
+    saveHomeContent((current) => ({
+      ...current,
+      sections: current.sections.map((section) => {
+        if (section.id !== sectionId) return section;
+        const productIds = Array.isArray(section.productIds) ? section.productIds : [];
+        const selected = productIds.includes(productId);
+        return {
+          ...section,
+          productIds: selected
+            ? productIds.filter((id) => id !== productId)
+            : [...productIds, productId],
+        };
+      }),
     }));
   };
 
@@ -1373,6 +1414,8 @@ export function useShopController() {
       toggleHomeComponentProduct,
       updateHomeHero,
       updateHomeSection,
+      updateHomeSectionItem,
+      toggleHomeSectionProduct,
       uploadHomeImage,
       updateImageForm,
       updatePaymentForm,

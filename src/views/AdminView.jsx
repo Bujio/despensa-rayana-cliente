@@ -415,6 +415,47 @@ export function AdminView({ state, actions }) {
                       <label>Texto del botón<input value={section.ctaLabel || ''} onChange={(event) => actions.updateHomeSection(section.id, 'ctaLabel', event.target.value)} /></label>
                     </>
                   )}
+                  {section.type === 'productCarousel' && (
+                    <div className="component-product-picker">
+                      {adminProducts.map((product) => {
+                        const productId = String(getId(product) || product.sku);
+                        const image = productModel.getImage(product);
+                        return (
+                          <label className="featured-selector-row" key={section.id + productId}>
+                            <input
+                              type="checkbox"
+                              checked={(section.productIds || []).includes(productId)}
+                              onChange={() => actions.toggleHomeSectionProduct(section.id, product)}
+                            />
+                            <span className="admin-thumb small-thumb">
+                              {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
+                            </span>
+                            <span>
+                              <strong>{product.name}</strong>
+                              <small>{product.sku} · {formatCurrency(product.price)}</small>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {section.type === 'promoBannerGrid' && (
+                    <div className="banner-piece-editor">
+                      {[0, 1, 2].map((itemIndex) => {
+                        const item = section.items?.[itemIndex] || {};
+                        return (
+                          <div className="custom-component-editor" key={section.id + itemIndex}>
+                            <strong>Pieza {itemIndex + 1}</strong>
+                            <label>Título<input value={item.title || ''} onChange={(event) => actions.updateHomeSectionItem(section.id, itemIndex, 'title', event.target.value)} /></label>
+                            <label>Texto<textarea value={item.body || ''} onChange={(event) => actions.updateHomeSectionItem(section.id, itemIndex, 'body', event.target.value)} /></label>
+                            <label>Imagen<input value={item.imageUrl || ''} onChange={(event) => actions.updateHomeSectionItem(section.id, itemIndex, 'imageUrl', event.target.value)} /></label>
+                            <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('sectionItem.' + section.id + '.' + itemIndex + '.imageUrl')} disabled={busy} /></label>
+                            <label>Enlace<input value={item.linkUrl || ''} onChange={(event) => actions.updateHomeSectionItem(section.id, itemIndex, 'linkUrl', event.target.value)} /></label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
