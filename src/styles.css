@@ -768,9 +768,33 @@ input:focus, select:focus { border-color: #315c45; box-shadow: 0 0 0 3px rgba(49
 
 .homepage-admin-layout {
   display: grid;
-  grid-template-columns: minmax(340px, 0.86fr) minmax(480px, 1.14fr);
+  grid-template-columns: minmax(360px, 0.9fr) minmax(520px, 1.1fr);
+  grid-template-areas:
+    "components selected"
+    "hero builder"
+    "featured builder";
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
+}
+
+.component-library {
+  grid-area: components;
+}
+
+.custom-component-panel {
+  grid-area: selected;
+}
+
+.home-editor-panel {
+  grid-area: hero;
+}
+
+.featured-selector-panel {
+  grid-area: featured;
+}
+
+.component-builder-panel {
+  grid-area: builder;
 }
 
 .admin-grid {
@@ -1041,6 +1065,16 @@ input[type="file"] {
   border: 1px solid rgba(49, 92, 69, 0.14);
   border-radius: 12px;
   background: #ffffff;
+}
+
+.custom-component-panel {
+  align-content: start;
+  border-color: rgba(35, 79, 54, 0.24);
+}
+
+.custom-component-panel > .custom-component-editor {
+  min-height: 100%;
+  background: linear-gradient(180deg, #ffffff 0%, #fffefa 100%);
 }
 
 @media (max-width: 1060px) {
