@@ -994,6 +994,28 @@ input[type="file"] {
 
 .featured-selector-row {
   grid-template-columns: auto 44px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: start;
+}
+
+.featured-selector-row > span:last-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-left: 2px;
+  line-height: 1.3;
+}
+
+.featured-selector-row strong {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.featured-selector-row small {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .small-thumb {
@@ -1237,6 +1259,7 @@ textarea,
 }
 
 .user-row.active,
+.component-row.active,
 .collection-row.active,
 .admin-order-row.active {
   border-color: rgba(49, 92, 69, 0.34);

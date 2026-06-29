@@ -117,6 +117,7 @@ export function AdminView({ state, actions }) {
   const categoriesPerPage = 5;
   const [adminProductsPage, setAdminProductsPage] = useState(1);
   const [adminCategoriesPage, setAdminCategoriesPage] = useState(1);
+  const [selectedHomeSectionId, setSelectedHomeSectionId] = useState('');
   const {
     adminProducts,
     adminReviews,
@@ -203,6 +204,9 @@ export function AdminView({ state, actions }) {
   const updateComponentForm = (field) => (event) => actions.updateHomeComponentForm(field, event.target.value);
   const uploadHomeImage = (target) => (event) => actions.uploadHomeImage(target, Array.from(event.target.files || []));
   const sortedHomeSections = [...(homeContent?.sections || [])].sort((first, second) => first.order - second.order);
+  const selectedHomeSection = sortedHomeSections.find((section) => section.id === selectedHomeSectionId)
+    || sortedHomeSections[0]
+    || null;
   const selectedFeaturedIds = homeContent?.featuredProductIds || [];
 
   const filteredUsers = adminUsers.filter((user) => includesSearch([
@@ -252,12 +256,15 @@ export function AdminView({ state, actions }) {
             <div className="admin-panel-title"><LayoutDashboard size={19} /> Componentes de portada</div>
             <div className="component-list">
               {sortedHomeSections.map((section, index) => (
-                <article className={'component-row' + (section.enabled ? '' : ' muted')} key={section.id}>
-                  <button className="component-main" type="button" onClick={() => actions.toggleHomeSection(section.id)}>
+                <article className={'component-row' + (section.enabled ? '' : ' muted') + (selectedHomeSection?.id === section.id ? ' active' : '')} key={section.id}>
+                  <button className="component-main" type="button" onClick={() => setSelectedHomeSectionId(section.id)}>
                     <strong>{section.title}</strong>
-                    <span>{getHomeSectionTypeLabel(section.type)} · {section.enabled ? 'Visible' : 'Oculto'}</span>
+                    <span>{getHomeSectionTypeLabel(section.type)} · {section.enabled ? 'Visible' : 'Oculto'} · Editar</span>
                   </button>
                   <div className="component-actions">
+                    <button className="icon-button" type="button" onClick={() => actions.toggleHomeSection(section.id)} title={section.enabled ? 'Ocultar componente' : 'Mostrar componente'}>
+                      <Eye size={16} />
+                    </button>
                     <button className="icon-button" type="button" onClick={() => actions.moveHomeSection(section.id, -1)} disabled={index === 0} title="Subir">
                       <MoveUp size={16} />
                     </button>
@@ -399,67 +406,88 @@ export function AdminView({ state, actions }) {
           </form>
 
           <section className="admin-panel custom-component-panel">
-            <div className="admin-panel-title"><LayoutDashboard size={19} /> Componentes personalizados</div>
-            {sortedHomeSections.filter((section) => !section.locked).length ? (
-              sortedHomeSections.filter((section) => !section.locked).map((section) => (
-                <div className="custom-component-editor" key={section.id}>
-                  <strong>{getHomeSectionTypeLabel(section.type)}</strong>
-                  <label>Título<input value={section.title || ''} onChange={(event) => actions.updateHomeSection(section.id, 'title', event.target.value)} /></label>
-                  <label>Subtítulo<input value={section.subtitle || ''} onChange={(event) => actions.updateHomeSection(section.id, 'subtitle', event.target.value)} /></label>
-                  <label>Texto<textarea value={section.body || ''} onChange={(event) => actions.updateHomeSection(section.id, 'body', event.target.value)} /></label>
-                  {(section.type === 'promoBanner' || section.type === 'custom') && (
-                    <>
-                      <label>Imagen<input value={section.imageUrl || ''} onChange={(event) => actions.updateHomeSection(section.id, 'imageUrl', event.target.value)} /></label>
-                      <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('section.' + section.id + '.imageUrl')} disabled={busy} /></label>
-                      <label>Enlace<input value={section.linkUrl || ''} onChange={(event) => actions.updateHomeSection(section.id, 'linkUrl', event.target.value)} /></label>
-                      <label>Texto del botón<input value={section.ctaLabel || ''} onChange={(event) => actions.updateHomeSection(section.id, 'ctaLabel', event.target.value)} /></label>
-                    </>
-                  )}
-                  {section.type === 'productCarousel' && (
-                    <div className="component-product-picker">
-                      {adminProducts.map((product) => {
-                        const productId = String(getId(product) || product.sku);
-                        const image = productModel.getImage(product);
-                        return (
-                          <label className="featured-selector-row" key={section.id + productId}>
-                            <input
-                              type="checkbox"
-                              checked={(section.productIds || []).includes(productId)}
-                              onChange={() => actions.toggleHomeSectionProduct(section.id, product)}
-                            />
-                            <span className="admin-thumb small-thumb">
-                              {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
-                            </span>
-                            <span>
-                              <strong>{product.name}</strong>
-                              <small>{product.sku} · {formatCurrency(product.price)}</small>
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {section.type === 'promoBannerGrid' && (
-                    <div className="banner-piece-editor">
-                      {[0, 1, 2].map((itemIndex) => {
-                        const item = section.items?.[itemIndex] || {};
-                        return (
-                          <div className="custom-component-editor" key={section.id + itemIndex}>
-                            <strong>Pieza {itemIndex + 1}</strong>
-                            <label>Título<input value={item.title || ''} onChange={(event) => actions.updateHomeSectionItem(section.id, itemIndex, 'title', event.target.value)} /></label>
-                            <label>Texto<textarea value={item.body || ''} onChange={(event) => actions.updateHomeSectionItem(section.id, itemIndex, 'body', event.target.value)} /></label>
-                            <label>Imagen<input value={item.imageUrl || ''} onChange={(event) => actions.updateHomeSectionItem(section.id, itemIndex, 'imageUrl', event.target.value)} /></label>
-                            <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('sectionItem.' + section.id + '.' + itemIndex + '.imageUrl')} disabled={busy} /></label>
-                            <label>Enlace<input value={item.linkUrl || ''} onChange={(event) => actions.updateHomeSectionItem(section.id, itemIndex, 'linkUrl', event.target.value)} /></label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))
+            <div className="admin-panel-title"><LayoutDashboard size={19} /> Editor del componente seleccionado</div>
+            {selectedHomeSection ? (
+              <div className="custom-component-editor" key={selectedHomeSection.id}>
+                <strong>{selectedHomeSection.title} · {getHomeSectionTypeLabel(selectedHomeSection.type)}</strong>
+
+                {selectedHomeSection.type === 'hero' ? (
+                  <>
+                    <label>Imagen principal<input value={homeContent?.hero?.imageUrl || ''} onChange={updateHero('imageUrl')} /></label>
+                    <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('hero.imageUrl')} disabled={busy} /></label>
+                    <label>Etiqueta<input value={homeContent?.hero?.eyebrow || ''} onChange={updateHero('eyebrow')} /></label>
+                    <label>Título<input value={homeContent?.hero?.title || ''} onChange={updateHero('title')} /></label>
+                    <label>Descripción<textarea value={homeContent?.hero?.description || ''} onChange={updateHero('description')} /></label>
+                    <label>Botón principal<input value={homeContent?.hero?.primaryLabel || ''} onChange={updateHero('primaryLabel')} /></label>
+                    <label>Botón secundario<input value={homeContent?.hero?.secondaryLabel || ''} onChange={updateHero('secondaryLabel')} /></label>
+                  </>
+                ) : (
+                  <>
+                    <label>Título<input value={selectedHomeSection.title || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'title', event.target.value)} /></label>
+                    <label>Subtítulo<input value={selectedHomeSection.subtitle || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'subtitle', event.target.value)} /></label>
+                    <label>Texto<textarea value={selectedHomeSection.body || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'body', event.target.value)} /></label>
+                  </>
+                )}
+
+                {(selectedHomeSection.type === 'promoBanner' || selectedHomeSection.type === 'custom') && (
+                  <>
+                    <label>Imagen<input value={selectedHomeSection.imageUrl || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'imageUrl', event.target.value)} /></label>
+                    <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('section.' + selectedHomeSection.id + '.imageUrl')} disabled={busy} /></label>
+                    <label>Enlace<input value={selectedHomeSection.linkUrl || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'linkUrl', event.target.value)} /></label>
+                    <label>Texto del botón<input value={selectedHomeSection.ctaLabel || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'ctaLabel', event.target.value)} /></label>
+                  </>
+                )}
+
+                {(selectedHomeSection.type === 'featured' || selectedHomeSection.type === 'productCarousel') && (
+                  <div className="component-product-picker">
+                    {adminProducts.map((product) => {
+                      const productId = String(getId(product) || product.sku);
+                      const image = productModel.getImage(product);
+                      const selectedIds = selectedHomeSection.type === 'featured' ? selectedFeaturedIds : selectedHomeSection.productIds || [];
+                      return (
+                        <label className="featured-selector-row" key={selectedHomeSection.id + productId}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(productId)}
+                            onChange={() => (
+                              selectedHomeSection.type === 'featured'
+                                ? actions.toggleFeaturedProduct(product)
+                                : actions.toggleHomeSectionProduct(selectedHomeSection.id, product)
+                            )}
+                          />
+                          <span className="admin-thumb small-thumb">
+                            {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
+                          </span>
+                          <span>
+                            <strong>{product.name}</strong>
+                            <small>{product.sku} · {formatCurrency(product.price)}</small>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selectedHomeSection.type === 'promoBannerGrid' && (
+                  <div className="banner-piece-editor">
+                    {[0, 1, 2].map((itemIndex) => {
+                      const item = selectedHomeSection.items?.[itemIndex] || {};
+                      return (
+                        <div className="custom-component-editor" key={selectedHomeSection.id + itemIndex}>
+                          <strong>Pieza {itemIndex + 1}</strong>
+                          <label>Título<input value={item.title || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'title', event.target.value)} /></label>
+                          <label>Texto<textarea value={item.body || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'body', event.target.value)} /></label>
+                          <label>Imagen<input value={item.imageUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'imageUrl', event.target.value)} /></label>
+                          <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('sectionItem.' + selectedHomeSection.id + '.' + itemIndex + '.imageUrl')} disabled={busy} /></label>
+                          <label>Enlace<input value={item.linkUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'linkUrl', event.target.value)} /></label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ) : (
-              <div className="empty-state compact-empty">Todavía no hay componentes adicionales.</div>
+              <div className="empty-state compact-empty">Selecciona un componente de la lista.</div>
             )}
           </section>
         </div>
