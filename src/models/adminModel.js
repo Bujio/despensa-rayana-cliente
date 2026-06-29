@@ -3,13 +3,14 @@ function buildProductPayload(form) {
     name: form.name.trim(),
     sku: form.sku.trim(),
     price: Number(form.price),
+    shortDescription: form.shortDescription.trim(),
+    description: form.description.trim(),
     stock: Number(form.stock),
     supplier: {
       id: Number(form.supplierId),
     },
   };
 
-  if (form.description.trim()) payload.description = form.description.trim();
   if (form.category) payload.category = form.category;
   if (form.supplierName.trim()) payload.supplier.name = form.supplierName.trim();
   if (Array.isArray(form.supplierImages)) payload.supplier.images = form.supplierImages;

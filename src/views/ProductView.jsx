@@ -4,6 +4,27 @@ import { productModel } from '../models/productModel.js';
 import { reviewModel } from '../models/reviewModel.js';
 import { formatCurrency } from './viewFormatters.js';
 
+const allowedDescriptionTags = new Set(['h2', 'h3', 'p', 'strong', 'b', 'u', 'em', 'ul', 'ol', 'li', 'br']);
+
+function sanitizeRichDescription(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const withoutScripts = raw.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '');
+  const safe = withoutScripts.replace(/<\s*(\/?)\s*([a-z0-9]+)(?:\s[^>]*)?>/gi, (match, slash, tagName) => {
+    const tag = String(tagName || '').toLowerCase();
+    if (!allowedDescriptionTags.has(tag)) return '';
+    const normalizedTag = tag === 'b' ? 'strong' : tag;
+    return `<${slash ? '/' : ''}${normalizedTag}>`;
+  });
+  return safe.replace(/\n{2,}/g, '\n').replace(/\n/g, '<br>');
+}
+
+function ProductDescription({ content }) {
+  const html = sanitizeRichDescription(content);
+  if (!html) return <p>Producto local seleccionado para tu despensa.</p>;
+  return <div className="rich-product-description" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 export function ProductView({ state, actions }) {
   const { busy, favoriteIds, loadingProductDetail, productReviews, reservedBySku, reviewForm, selectedProduct, session } = state;
   const [quantity, setQuantity] = useState(1);
@@ -43,6 +64,8 @@ export function ProductView({ state, actions }) {
   const isFavorite = favoriteIds.includes(selectedProductId);
   const reviewSummary = reviewModel.getSummary(productReviews);
   const ownReview = productReviews.find((review) => String(review.user?._id || review.user?.id || review.user) === String(session?.user?.id || session?.user?._id));
+  const shortDescription = selectedProduct.shortDescription || selectedProduct.description || 'Producto local seleccionado para tu despensa.';
+  const longDescription = selectedProduct.description || selectedProduct.shortDescription || '';
 
   const updateQuantity = (nextQuantity) => {
     setQuantity(Math.min(Math.max(nextQuantity, 1), Math.max(availableStock, 1)));
@@ -105,7 +128,7 @@ export function ProductView({ state, actions }) {
             </span>
             <span>({reviewSummary.count} valoraciones)</span>
           </div>
-          <p>{selectedProduct.description || 'Producto local seleccionado para tu despensa.'}</p>
+          <p className="short-product-description">{shortDescription}</p>
 
           <div className="detail-price">
             {hasPriceOffer && <span className="old-price">{formatCurrency(selectedProduct.price)}</span>}
@@ -155,7 +178,7 @@ export function ProductView({ state, actions }) {
 
         {activeTab === 'description' && (
           <div className="tab-content">
-            <p>{selectedProduct.description || 'Producto local seleccionado para tu despensa.'}</p>
+            <ProductDescription content={longDescription} />
             <div className="product-origin-facts">
               <span><BadgeCheck size={18} /> Origen seleccionado</span>
               <span><ShieldCheck size={18} /> Calidad contrastada</span>

@@ -1,10 +1,14 @@
 import {
+  Bold,
   ChevronLeft,
   ChevronRight,
   Eye,
+  Heading2,
+  Heading3,
   ImageUp,
   LayoutDashboard,
   Link,
+  List,
   MessageSquare,
   MoveDown,
   MoveUp,
@@ -17,6 +21,8 @@ import {
   ShoppingBag,
   Tags,
   Trash2,
+  Type,
+  Underline,
   UserCog,
   Users,
 } from 'lucide-react';
@@ -197,6 +203,19 @@ export function AdminView({ state, actions }) {
 
   const updateCategory = (field) => (event) => actions.updateCategoryForm(field, event.target.value);
   const updateProduct = (field) => (event) => actions.updateProductForm(field, event.target.value);
+  const insertProductDescriptionBlock = (block) => {
+    const snippets = {
+      title: '<h2>Título de sección</h2>',
+      subtitle: '<h3>Subtítulo</h3>',
+      text: '<p>Texto descriptivo del producto.</p>',
+      bold: '<strong>texto destacado</strong>',
+      underline: '<u>texto subrayado</u>',
+      list: '<ul>\n  <li>Punto destacado</li>\n</ul>',
+    };
+    const currentDescription = productForm.description || '';
+    const separator = currentDescription.trim() ? '\n' : '';
+    actions.updateProductForm('description', currentDescription + separator + snippets[block]);
+  };
   const updateImage = (field) => (event) => actions.updateImageForm(field, event.target.value);
   const updateFiles = (event) => actions.updateImageForm('files', Array.from(event.target.files || []));
   const updateUser = (field) => (event) => actions.updateAdminUserForm(field, event.target.value);
@@ -655,7 +674,21 @@ export function AdminView({ state, actions }) {
               </label>
               <label>ID proveedor<input required type="number" min="0" step="1" value={productForm.supplierId} onChange={updateProduct('supplierId')} /></label>
               <label className="wide-field">Proveedor<input value={productForm.supplierName} onChange={updateProduct('supplierName')} placeholder="Ej. Cooperativa local" /></label>
-              <label className="wide-field">Descripción<textarea value={productForm.description} onChange={updateProduct('description')} placeholder="Origen, elaboración, uso recomendado..." /></label>
+              <label className="wide-field">Descripción corta<input value={productForm.shortDescription} onChange={updateProduct('shortDescription')} placeholder="Resumen breve que aparece junto a la valoración y antes del precio" /></label>
+              <div className="wide-field rich-description-editor">
+                <div className="rich-editor-header">
+                  <span>Descripción larga</span>
+                  <div className="rich-editor-toolbar" aria-label="Herramientas de formato">
+                    <button type="button" onClick={() => insertProductDescriptionBlock('title')} title="Título"><Heading2 size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('subtitle')} title="Subtítulo"><Heading3 size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('text')} title="Texto"><Type size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('bold')} title="Negrita"><Bold size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('underline')} title="Subrayado"><Underline size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('list')} title="Lista"><List size={16} /></button>
+                  </div>
+                </div>
+                <textarea value={productForm.description} onChange={updateProduct('description')} placeholder="Usa la barra para añadir títulos, subtítulos, texto destacado o listas. Esta descripción aparece en la pestaña Descripción." />
+              </div>
             </div>
 
             <section className="product-image-editor">
