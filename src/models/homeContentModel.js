@@ -70,4 +70,16 @@ export const homeContentModel = {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     return normalized;
   },
+  async loadRemote(apiRequest) {
+    const content = await apiRequest('/home-content', {}, null);
+    return this.save(content);
+  },
+  async saveRemote(request, content) {
+    const normalized = normalize(content);
+    const saved = await request('/home-content', {
+      method: 'PUT',
+      body: JSON.stringify(normalized),
+    });
+    return this.save(saved);
+  },
 };

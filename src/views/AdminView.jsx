@@ -265,6 +265,9 @@ export function AdminView({ state, actions }) {
             <button className="secondary full" type="button" onClick={actions.resetHomeContent}>
               <RotateCcw size={17} /> Restablecer portada
             </button>
+            <button className="primary full" type="button" onClick={actions.saveHomeContentSettings} disabled={busy}>
+              <Save size={17} /> Guardar en Atlas
+            </button>
           </section>
 
           <section className="admin-panel home-editor-panel">

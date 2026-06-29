@@ -232,7 +232,16 @@ export function useShopController() {
   useEffect(() => {
     loadCategories();
     loadFeaturedProducts();
+    loadHomeContent();
   }, []);
+
+  async function loadHomeContent() {
+    try {
+      setHomeContent(await homeContentModel.loadRemote(apiRequest));
+    } catch {
+      setHomeContent(homeContentModel.load());
+    }
+  }
 
   useEffect(() => {
     loadProducts();
@@ -865,6 +874,19 @@ export function useShopController() {
     setNotice('Portada restablecida.');
   };
 
+  async function saveHomeContentSettings() {
+    if (session?.user?.role !== 'admin') return;
+    setBusy(true);
+    try {
+      setHomeContent(await homeContentModel.saveRemote(request, homeContent));
+      setNotice('Portada guardada en Atlas.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const updateAdminUserForm = (field, value) => {
     setAdminUserForm((current) => ({ ...current, [field]: value }));
   };
@@ -1238,6 +1260,7 @@ export function useShopController() {
       deleteHomeSection,
       createHomeComponent,
       resetHomeContent,
+      saveHomeContentSettings,
       saveImageUrl,
       submitProductReview,
       uploadProductImages,
