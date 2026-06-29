@@ -162,6 +162,50 @@ function buildRoute(view, productId = '') {
   return routeByView[view] || routeByView.home;
 }
 
+function assignHomeImage(content, target, imageUrl) {
+  if (target === 'hero.imageUrl') {
+    return {
+      ...content,
+      hero: {
+        ...content.hero,
+        imageUrl,
+      },
+    };
+  }
+
+  if (target.startsWith('sectionItem.')) {
+    const [, sectionId, itemIndex, field] = target.split('.');
+    return {
+      ...content,
+      sections: content.sections.map((section) => {
+        if (section.id !== sectionId) return section;
+        const items = [...(Array.isArray(section.items) ? section.items : [])];
+        items[Number(itemIndex)] = {
+          title: '',
+          body: '',
+          imageUrl: '',
+          linkUrl: '',
+          ...(items[Number(itemIndex)] || {}),
+          [field]: imageUrl,
+        };
+        return { ...section, items };
+      }),
+    };
+  }
+
+  if (target.startsWith('section.')) {
+    const [, sectionId, field] = target.split('.');
+    return {
+      ...content,
+      sections: content.sections.map((section) => (
+        section.id === sectionId ? { ...section, [field]: imageUrl } : section
+      )),
+    };
+  }
+
+  return content;
+}
+
 const hasClientSideFilters = (filters) => Boolean(
   filters.onlyOffers ||
   filters.origin ||
@@ -895,19 +939,17 @@ export function useShopController({ navigate, routePath = '/', routeProductId = 
       const imageUrl = result?.images?.[0]?.url;
       if (!imageUrl) throw new Error('No se recibió la URL de la imagen.');
 
-      if (target === 'hero.imageUrl') {
-        updateHomeHero('imageUrl', imageUrl);
-      } else if (target.startsWith('component.')) {
+      if (target.startsWith('component.')) {
         updateHomeComponentForm(target.replace('component.', ''), imageUrl);
-      } else if (target.startsWith('sectionItem.')) {
-        const [, sectionId, itemIndex, field] = target.split('.');
-        updateHomeSectionItem(sectionId, Number(itemIndex), field, imageUrl);
-      } else if (target.startsWith('section.')) {
-        const [, sectionId, field] = target.split('.');
-        updateHomeSection(sectionId, field, imageUrl);
+        setNotice('Imagen subida y asignada. Añade el componente para guardarla en la portada.');
+        return;
       }
 
-      setNotice('Imagen subida y asignada.');
+      const nextHomeContent = homeContentModel.save(assignHomeImage(homeContent, target, imageUrl));
+      setHomeContent(nextHomeContent);
+      const savedHomeContent = await homeContentModel.saveRemote(request, nextHomeContent);
+      setHomeContent(savedHomeContent);
+      setNotice('Imagen subida, asignada y guardada en Atlas.');
     } catch (error) {
       setNotice(error.message === 'Internal server error'
         ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'

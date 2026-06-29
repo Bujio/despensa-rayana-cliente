@@ -382,8 +382,11 @@ export function AdminView({ state, actions }) {
                 <div className="selected-component-heading">
                   <span className="eyebrow">{getHomeSectionTypeLabel(selectedHomeSection.type)}</span>
                   <h2>{selectedHomeSection.title}</h2>
-                  <p>Modifica este bloque de portada desde aquí. Los cambios se guardan al pulsar Guardar en Atlas.</p>
+                  <p>Modifica este bloque de portada desde aquí. Las imágenes subidas se guardan automáticamente; para texto y enlaces pulsa Guardar cambios.</p>
                 </div>
+                <button className="primary full" type="button" onClick={actions.saveHomeContentSettings} disabled={busy}>
+                  <Save size={17} /> Guardar cambios en Atlas
+                </button>
 
                 {selectedHomeSection.type === 'hero' ? (
                   <div className="admin-form-grid selected-component-fields">
