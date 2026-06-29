@@ -1,0 +1,20 @@
+{
+  "name": "frontend-despensa-rayana",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "seed:extremadura": "node scripts/seed-extremadura-products.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "vite": "^7.3.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "lucide-react": "^0.562.0"
+  },
+  "devDependencies": {}
+}
