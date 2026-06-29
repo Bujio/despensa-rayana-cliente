@@ -147,6 +147,32 @@ const formatDateInput = (value) => {
 
 const getProductId = (product) => String(product?._id || product?.id || product?.sku || '');
 
+const routeByView = {
+  home: '/',
+  catalog: '/catalogo',
+  cart: '/cesta',
+  story: '/la-rayana',
+  orders: '/pedidos',
+  account: '/cuenta',
+  admin: '/gestion',
+};
+
+function parseRoute(pathname = window.location.pathname) {
+  const path = pathname.replace(/\/+$/, '') || '/';
+  const productMatch = path.match(/^\/producto\/([^/]+)$/);
+  if (productMatch) {
+    return { view: 'product', productId: decodeURIComponent(productMatch[1]) };
+  }
+
+  const view = Object.entries(routeByView).find(([, route]) => route === path)?.[0] || 'home';
+  return { view, productId: '' };
+}
+
+function buildRoute(view, productId = '') {
+  if (view === 'product' && productId) return '/producto/' + encodeURIComponent(productId);
+  return routeByView[view] || routeByView.home;
+}
+
 const hasClientSideFilters = (filters) => Boolean(
   filters.onlyOffers ||
   filters.origin ||
@@ -155,6 +181,7 @@ const hasClientSideFilters = (filters) => Boolean(
 );
 
 export function useShopController() {
+  const initialRoute = parseRoute();
   const [session, setSession] = useState(() => sessionModel.get());
   const [products, setProducts] = useState([]);
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -173,7 +200,8 @@ export function useShopController() {
   const [favoriteIds, setFavoriteIds] = useState(() => favoritesModel.getAll());
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
-  const [view, setView] = useState('home');
+  const [view, setViewState] = useState(initialRoute.view);
+  const [routeProductId, setRouteProductId] = useState(initialRoute.productId);
   const [busy, setBusy] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [notice, setNotice] = useState('');
@@ -248,10 +276,48 @@ export function useShopController() {
 
   const request = (path, options) => apiRequest(path, options, session, applySession);
 
+  const setView = (nextView, options = {}) => {
+    const productId = options.productId || '';
+    const nextPath = buildRoute(nextView, productId);
+    const currentPath = window.location.pathname || '/';
+    const shouldReplace = options.replace || false;
+
+    if (currentPath !== nextPath) {
+      window.history[shouldReplace ? 'replaceState' : 'pushState'](
+        { view: nextView, productId },
+        '',
+        nextPath,
+      );
+    }
+
+    setViewState(nextView);
+    setRouteProductId(nextView === 'product' ? productId : '');
+  };
+
   useEffect(() => {
     loadCategories();
     loadFeaturedProducts();
     loadHomeContent();
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const nextRoute = parseRoute();
+      setViewState(nextRoute.view);
+      setRouteProductId(nextRoute.productId);
+      if (nextRoute.view !== 'product') {
+        setSelectedProduct(null);
+        setProductReviews([]);
+      }
+    };
+
+    window.history.replaceState(
+      { view, productId: routeProductId },
+      '',
+      buildRoute(view, routeProductId),
+    );
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   async function loadHomeContent() {
@@ -265,6 +331,12 @@ export function useShopController() {
   useEffect(() => {
     loadProducts();
   }, [page, filters, favoriteIds]);
+
+  useEffect(() => {
+    if (view === 'product' && routeProductId) {
+      loadProductFromRoute(routeProductId);
+    }
+  }, [view, routeProductId]);
 
   useEffect(() => {
     if (session) {
@@ -354,7 +426,7 @@ export function useShopController() {
     if (!productId) return;
 
     setSelectedProduct(product);
-    setView('product');
+    setView('product', { productId });
     setLoadingProductDetail(true);
     await loadProductReviews(productId);
     try {
@@ -363,6 +435,24 @@ export function useShopController() {
       await loadProductReviews(productId);
     } catch (error) {
       setNotice(error.message);
+    } finally {
+      setLoadingProductDetail(false);
+    }
+  }
+
+  async function loadProductFromRoute(productId) {
+    if (!productId) return;
+    const selectedId = selectedProduct?._id || selectedProduct?.id;
+    if (String(selectedId || '') === String(productId) && selectedProduct?.name) return;
+
+    setLoadingProductDetail(true);
+    try {
+      const fullProduct = await catalogModel.getProduct(productId);
+      setSelectedProduct(fullProduct);
+      await loadProductReviews(productId);
+    } catch (error) {
+      setNotice(error.message);
+      setSelectedProduct(null);
     } finally {
       setLoadingProductDetail(false);
     }
