@@ -121,6 +121,11 @@ export function HomeView({ state, actions }) {
   const carouselProducts = featuredProducts
     .filter((product) => productModel.getImage(product))
     .filter((product) => !selectedFeaturedIds.length || selectedFeaturedIds.includes(getProductId(product)));
+  const heroEyebrow = hero.eyebrow ?? 'Origen extremeno - Espiritu rayano';
+  const heroTitle = hero.title ?? 'Sabores que cruzan fronteras, tradicion que nos une.';
+  const heroDescription = hero.description ?? 'Productos de origen extremeno de la zona de La Raya.';
+  const heroPrimaryLabel = hero.primaryLabel ?? 'Descubre productos';
+  const heroSecondaryLabel = hero.secondaryLabel ?? 'Nuestra historia';
 
   const scrollFeatured = (direction) => {
     const carousel = featuredCarouselRef.current;
@@ -151,16 +156,20 @@ export function HomeView({ state, actions }) {
       style={{ '--hero-image': `url("${hero.imageUrl || defaultHeroImage}")` }}
     >
         <div className="hero-copy">
-          <span className="eyebrow">{hero.eyebrow || 'Origen extremeno - Espiritu rayano'}</span>
-          <h1>{hero.title || 'Sabores que cruzan fronteras, tradicion que nos une.'}</h1>
-          <p>{hero.description || 'Productos de origen extremeno de la zona de La Raya.'}</p>
+          {heroEyebrow !== '' && <span className="eyebrow">{heroEyebrow}</span>}
+          {heroTitle !== '' && <h1>{heroTitle}</h1>}
+          {heroDescription !== '' && <p>{heroDescription}</p>}
           <div className="hero-actions">
-            <button className="primary" type="button" onClick={() => actions.setView('catalog')}>
-              {hero.primaryLabel || 'Descubre productos'} <ArrowRight size={18} />
-            </button>
-            <button className="secondary" type="button" onClick={() => actions.setView('story')}>
-              {hero.secondaryLabel || 'Nuestra historia'}
-            </button>
+            {heroPrimaryLabel !== '' && (
+              <button className="primary" type="button" onClick={() => actions.setView('catalog')}>
+                {heroPrimaryLabel} <ArrowRight size={18} />
+              </button>
+            )}
+            {heroSecondaryLabel !== '' && (
+              <button className="secondary" type="button" onClick={() => actions.setView('story')}>
+                {heroSecondaryLabel}
+              </button>
+            )}
           </div>
         </div>
       </div>
