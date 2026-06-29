@@ -768,13 +768,12 @@ input:focus, select:focus { border-color: #315c45; box-shadow: 0 0 0 3px rgba(49
 
 .homepage-admin-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 0.9fr) minmax(520px, 1.1fr);
+  grid-template-columns: minmax(360px, 0.85fr) minmax(560px, 1.15fr);
   grid-template-areas:
     "components selected"
-    "hero builder"
-    "featured builder";
+    "builder selected";
   gap: 18px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .component-library {
@@ -783,14 +782,6 @@ input:focus, select:focus { border-color: #315c45; box-shadow: 0 0 0 3px rgba(49
 
 .custom-component-panel {
   grid-area: selected;
-}
-
-.home-editor-panel {
-  grid-area: hero;
-}
-
-.featured-selector-panel {
-  grid-area: featured;
 }
 
 .component-builder-panel {
@@ -1067,14 +1058,46 @@ input[type="file"] {
   background: #ffffff;
 }
 
+.selected-component-editor {
+  display: grid;
+  gap: 16px;
+  min-height: 100%;
+  padding: 14px;
+  border: 1px solid rgba(49, 92, 69, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fffefa 100%);
+}
+
+.selected-component-heading {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+
+.selected-component-heading h2 {
+  margin: 0;
+  color: #1e2a22;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(24px, 2vw, 34px);
+  line-height: 1.08;
+}
+
+.selected-component-heading p {
+  margin: 0;
+  color: #667064;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.selected-component-fields {
+  padding-top: 14px;
+  border-top: 1px solid rgba(49, 92, 69, 0.12);
+}
+
 .custom-component-panel {
   align-content: start;
   border-color: rgba(35, 79, 54, 0.24);
-}
-
-.custom-component-panel > .custom-component-editor {
-  min-height: 100%;
-  background: linear-gradient(180deg, #ffffff 0%, #fffefa 100%);
 }
 
 @media (max-width: 1060px) {

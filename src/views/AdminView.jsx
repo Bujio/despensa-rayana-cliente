@@ -286,55 +286,6 @@ export function AdminView({ state, actions }) {
             </button>
           </section>
 
-          <section className="admin-panel home-editor-panel">
-            <div className="admin-panel-title"><ImageUp size={19} /> Hero banner</div>
-            <div className="admin-form-grid">
-              <label className="wide-field">Imagen principal<input value={homeContent?.hero?.imageUrl || ''} onChange={updateHero('imageUrl')} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
-              <label className="wide-field">Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('hero.imageUrl')} disabled={busy} /></label>
-              <label>Etiqueta<input value={homeContent?.hero?.eyebrow || ''} onChange={updateHero('eyebrow')} /></label>
-              <label>Título<input value={homeContent?.hero?.title || ''} onChange={updateHero('title')} /></label>
-              <label className="wide-field">Descripción<textarea value={homeContent?.hero?.description || ''} onChange={updateHero('description')} /></label>
-              <label>Botón principal<input value={homeContent?.hero?.primaryLabel || ''} onChange={updateHero('primaryLabel')} /></label>
-              <label>Botón secundario<input value={homeContent?.hero?.secondaryLabel || ''} onChange={updateHero('secondaryLabel')} /></label>
-            </div>
-            {homeContent?.hero?.imageUrl && (
-              <div className="hero-admin-preview">
-                <img src={homeContent.hero.imageUrl} alt="" />
-                <div>
-                  <strong>{homeContent.hero.title}</strong>
-                  <span>{homeContent.hero.description}</span>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="admin-panel featured-selector-panel">
-            <div className="admin-panel-title"><ShoppingBag size={19} /> Carrusel de productos</div>
-            <div className="soft-note">Seleccionados: {selectedFeaturedIds.length || 'todos los productos con imagen'}</div>
-            <div className="featured-selector">
-              {adminProducts.map((product) => {
-                const productId = getId(product) || product.sku;
-                const image = productModel.getImage(product);
-                return (
-                  <label className="featured-selector-row" key={productId}>
-                    <input
-                      type="checkbox"
-                      checked={selectedFeaturedIds.includes(String(productId))}
-                      onChange={() => actions.toggleFeaturedProduct(product)}
-                    />
-                    <span className="admin-thumb small-thumb">
-                      {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
-                    </span>
-                    <span>
-                      <strong>{product.name}</strong>
-                      <small>{product.sku} · {formatCurrency(product.price)}</small>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </section>
-
           <form className="admin-panel component-builder-panel" onSubmit={actions.createHomeComponent}>
             <div className="admin-panel-title"><Plus size={19} /> Nuevo componente</div>
             <div className="admin-form-grid">
@@ -408,37 +359,63 @@ export function AdminView({ state, actions }) {
           <section className="admin-panel custom-component-panel">
             <div className="admin-panel-title"><LayoutDashboard size={19} /> Editor del componente seleccionado</div>
             {selectedHomeSection ? (
-              <div className="custom-component-editor" key={selectedHomeSection.id}>
-                <strong>{selectedHomeSection.title} · {getHomeSectionTypeLabel(selectedHomeSection.type)}</strong>
+              <div className="selected-component-editor" key={selectedHomeSection.id}>
+                <div className="selected-component-heading">
+                  <span className="eyebrow">{getHomeSectionTypeLabel(selectedHomeSection.type)}</span>
+                  <h2>{selectedHomeSection.title}</h2>
+                  <p>Modifica este bloque de portada desde aquí. Los cambios se guardan al pulsar Guardar en Atlas.</p>
+                </div>
 
                 {selectedHomeSection.type === 'hero' ? (
-                  <>
-                    <label>Imagen principal<input value={homeContent?.hero?.imageUrl || ''} onChange={updateHero('imageUrl')} /></label>
-                    <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('hero.imageUrl')} disabled={busy} /></label>
+                  <div className="admin-form-grid selected-component-fields">
+                    <label className="wide-field">Imagen principal<input value={homeContent?.hero?.imageUrl || ''} onChange={updateHero('imageUrl')} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
+                    <label className="wide-field">Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('hero.imageUrl')} disabled={busy} /></label>
                     <label>Etiqueta<input value={homeContent?.hero?.eyebrow || ''} onChange={updateHero('eyebrow')} /></label>
                     <label>Título<input value={homeContent?.hero?.title || ''} onChange={updateHero('title')} /></label>
-                    <label>Descripción<textarea value={homeContent?.hero?.description || ''} onChange={updateHero('description')} /></label>
+                    <label className="wide-field">Descripción<textarea value={homeContent?.hero?.description || ''} onChange={updateHero('description')} /></label>
                     <label>Botón principal<input value={homeContent?.hero?.primaryLabel || ''} onChange={updateHero('primaryLabel')} /></label>
                     <label>Botón secundario<input value={homeContent?.hero?.secondaryLabel || ''} onChange={updateHero('secondaryLabel')} /></label>
-                  </>
+                  </div>
                 ) : (
-                  <>
+                  <div className="admin-form-grid selected-component-fields">
                     <label>Título<input value={selectedHomeSection.title || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'title', event.target.value)} /></label>
                     <label>Subtítulo<input value={selectedHomeSection.subtitle || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'subtitle', event.target.value)} /></label>
-                    <label>Texto<textarea value={selectedHomeSection.body || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'body', event.target.value)} /></label>
-                  </>
+                    <label className="wide-field">Texto<textarea value={selectedHomeSection.body || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'body', event.target.value)} /></label>
+                  </div>
                 )}
 
                 {(selectedHomeSection.type === 'promoBanner' || selectedHomeSection.type === 'custom') && (
-                  <>
-                    <label>Imagen<input value={selectedHomeSection.imageUrl || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'imageUrl', event.target.value)} /></label>
-                    <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('section.' + selectedHomeSection.id + '.imageUrl')} disabled={busy} /></label>
+                  <div className="admin-form-grid selected-component-fields">
+                    <label className="wide-field">Imagen<input value={selectedHomeSection.imageUrl || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'imageUrl', event.target.value)} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
+                    <label className="wide-field">Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('section.' + selectedHomeSection.id + '.imageUrl')} disabled={busy} /></label>
                     <label>Enlace<input value={selectedHomeSection.linkUrl || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'linkUrl', event.target.value)} /></label>
                     <label>Texto del botón<input value={selectedHomeSection.ctaLabel || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'ctaLabel', event.target.value)} /></label>
-                  </>
+                  </div>
+                )}
+
+                {selectedHomeSection.type === 'hero' && homeContent?.hero?.imageUrl && (
+                  <div className="hero-admin-preview">
+                    <img src={homeContent.hero.imageUrl} alt="" />
+                    <div>
+                      <strong>{homeContent.hero.title}</strong>
+                      <span>{homeContent.hero.description}</span>
+                    </div>
+                  </div>
+                )}
+
+                {(selectedHomeSection.type === 'promoBanner' || selectedHomeSection.type === 'custom') && selectedHomeSection.imageUrl && (
+                  <div className="hero-admin-preview">
+                    <img src={selectedHomeSection.imageUrl} alt="" />
+                    <div>
+                      <strong>{selectedHomeSection.title}</strong>
+                      <span>{selectedHomeSection.body || selectedHomeSection.subtitle}</span>
+                    </div>
+                  </div>
                 )}
 
                 {(selectedHomeSection.type === 'featured' || selectedHomeSection.type === 'productCarousel') && (
+                  <>
+                  <div className="soft-note">Seleccionados: {(selectedHomeSection.type === 'featured' ? selectedFeaturedIds : selectedHomeSection.productIds || []).length || 'todos los productos con imagen'}</div>
                   <div className="component-product-picker">
                     {adminProducts.map((product) => {
                       const productId = String(getId(product) || product.sku);
@@ -466,6 +443,7 @@ export function AdminView({ state, actions }) {
                       );
                     })}
                   </div>
+                  </>
                 )}
 
                 {selectedHomeSection.type === 'promoBannerGrid' && (
