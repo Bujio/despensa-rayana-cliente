@@ -99,7 +99,9 @@ function AdminTabs({ active, actions }) {
 
 export function AdminView({ state, actions }) {
   const productsPerPage = 5;
+  const categoriesPerPage = 5;
   const [adminProductsPage, setAdminProductsPage] = useState(1);
+  const [adminCategoriesPage, setAdminCategoriesPage] = useState(1);
   const {
     adminProducts,
     adminReviews,
@@ -172,6 +174,21 @@ export function AdminView({ state, actions }) {
     category.slug,
     category.description,
   ], adminSearch.categories));
+  const categoryTotalPages = Math.max(1, Math.ceil(filteredCategories.length / categoriesPerPage));
+  const paginatedCategories = filteredCategories.slice(
+    (adminCategoriesPage - 1) * categoriesPerPage,
+    adminCategoriesPage * categoriesPerPage,
+  );
+
+  useEffect(() => {
+    setAdminCategoriesPage(1);
+  }, [adminSearch.categories, categories.length]);
+
+  useEffect(() => {
+    if (adminCategoriesPage > categoryTotalPages) {
+      setAdminCategoriesPage(categoryTotalPages);
+    }
+  }, [adminCategoriesPage, categoryTotalPages]);
 
   const filteredOrders = orders.filter((order) => includesSearch([
     getId(order),
@@ -443,7 +460,7 @@ export function AdminView({ state, actions }) {
               <Plus size={17} /> Nueva categoría
             </button>
             <div className="admin-list">
-              {filteredCategories.map((category) => {
+              {paginatedCategories.map((category) => {
                 const categoryId = getId(category);
                 return (
                   <article className={'collection-row' + (selectedAdminCategoryId === categoryId ? ' active' : '')} key={categoryId}>
@@ -457,6 +474,31 @@ export function AdminView({ state, actions }) {
                 );
               })}
             </div>
+            {filteredCategories.length ? (
+              <div className="pager admin-pager">
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={adminCategoriesPage <= 1}
+                  onClick={() => setAdminCategoriesPage((value) => Math.max(1, value - 1))}
+                  title="Página anterior"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <span>Página {adminCategoriesPage} de {categoryTotalPages} · {filteredCategories.length} categorías</span>
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={adminCategoriesPage >= categoryTotalPages}
+                  onClick={() => setAdminCategoriesPage((value) => Math.min(categoryTotalPages, value + 1))}
+                  title="Página siguiente"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            ) : (
+              <div className="empty-state compact-empty">No hay categorías para mostrar.</div>
+            )}
           </section>
 
           <form className="admin-panel" onSubmit={actions.createCategory}>
