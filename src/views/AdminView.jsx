@@ -1,4 +1,6 @@
 import {
+  ChevronLeft,
+  ChevronRight,
   Eye,
   ImageUp,
   Link,
@@ -14,6 +16,7 @@ import {
   UserCog,
   Users,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { formatCurrency } from './viewFormatters.js';
@@ -95,6 +98,8 @@ function AdminTabs({ active, actions }) {
 }
 
 export function AdminView({ state, actions }) {
+  const productsPerPage = 5;
+  const [adminProductsPage, setAdminProductsPage] = useState(1);
   const {
     adminProducts,
     adminReviews,
@@ -118,6 +123,29 @@ export function AdminView({ state, actions }) {
     session,
   } = state;
 
+  const filteredProducts = adminProducts.filter((product) => includesSearch([
+    product.name,
+    product.sku,
+    product.description,
+    productModel.getCategoryName(product.category),
+    product.supplier?.name,
+  ], adminSearch.products));
+  const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
+  const paginatedProducts = filteredProducts.slice(
+    (adminProductsPage - 1) * productsPerPage,
+    adminProductsPage * productsPerPage,
+  );
+
+  useEffect(() => {
+    setAdminProductsPage(1);
+  }, [adminSearch.products, adminProducts.length]);
+
+  useEffect(() => {
+    if (adminProductsPage > productTotalPages) {
+      setAdminProductsPage(productTotalPages);
+    }
+  }, [adminProductsPage, productTotalPages]);
+
   if (session?.user?.role !== 'admin') {
     return (
       <section className="wide-panel single">
@@ -138,14 +166,6 @@ export function AdminView({ state, actions }) {
     user.phone,
     getRoleLabel(user.role),
   ], adminSearch.users));
-
-  const filteredProducts = adminProducts.filter((product) => includesSearch([
-    product.name,
-    product.sku,
-    product.description,
-    productModel.getCategoryName(product.category),
-    product.supplier?.name,
-  ], adminSearch.products));
 
   const filteredCategories = categories.filter((category) => includesSearch([
     category.name,
@@ -306,7 +326,7 @@ export function AdminView({ state, actions }) {
               <Plus size={17} /> Nuevo producto
             </button>
             <div className="admin-list">
-              {filteredProducts.map((product) => {
+              {paginatedProducts.map((product) => {
                 const productId = getId(product);
                 const offerLabel = productModel.getOfferLabel(product);
                 const image = productModel.getImage(product);
@@ -326,6 +346,31 @@ export function AdminView({ state, actions }) {
                 );
               })}
             </div>
+            {filteredProducts.length ? (
+              <div className="pager admin-pager">
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={adminProductsPage <= 1}
+                  onClick={() => setAdminProductsPage((value) => Math.max(1, value - 1))}
+                  title="Página anterior"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <span>Página {adminProductsPage} de {productTotalPages} · {filteredProducts.length} productos</span>
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={adminProductsPage >= productTotalPages}
+                  onClick={() => setAdminProductsPage((value) => Math.min(productTotalPages, value + 1))}
+                  title="Página siguiente"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            ) : (
+              <div className="empty-state compact-empty">No hay productos para mostrar.</div>
+            )}
           </section>
 
           <form className="admin-panel product-editor-panel" onSubmit={actions.createProduct}>
