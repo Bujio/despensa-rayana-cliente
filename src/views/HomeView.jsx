@@ -109,15 +109,17 @@ export function HomeView({ state, actions }) {
     .sort((first, second) => first.order - second.order);
   const selectedFeaturedIds = homeContent?.featuredProductIds || [];
 
-  const visibleCategories = categoryVisualModel.list().filter((visual) => visual.label !== 'Ofertas').map((visual) => ({
-    id: categories.find((category) => categoryVisualModel.matches(category, visual))?._id
-      || categories.find((category) => categoryVisualModel.matches(category, visual))?.id
-      || '',
-    name: visual.label,
-    caption: visual.caption,
-    image: visual.image,
-    description: visual.description,
-  }));
+  const defaultVisibleCategories = categoryVisualModel.list().filter((visual) => visual.label !== 'Ofertas').map((visual) => {
+    const matchedCategory = categories.find((category) => categoryVisualModel.matches(category, visual));
+    return {
+      id: matchedCategory?._id || matchedCategory?.id || '',
+      name: visual.label,
+      caption: visual.caption,
+      image: visual.image,
+      description: visual.description,
+      linkUrl: visual.label,
+    };
+  });
   const carouselProducts = featuredProducts
     .filter((product) => productModel.getImage(product))
     .filter((product) => !selectedFeaturedIds.length || selectedFeaturedIds.includes(getProductId(product)));
@@ -184,11 +186,39 @@ export function HomeView({ state, actions }) {
       </section>
   );
 
-  const renderCategories = () => (
+  const openCategoryTile = (category) => {
+    const linkUrl = category.linkUrl || category.name;
+    if (!linkUrl || linkUrl === category.name) {
+      actions.openCommerceCategory(category.name);
+      return;
+    }
+    if (categoryVisualModel.findVisual(linkUrl)) {
+      actions.openCommerceCategory(linkUrl);
+      return;
+    }
+    openSectionLink(linkUrl);
+  };
+
+  const renderCategories = (section) => {
+    const visibleCategories = (Array.isArray(section.items) && section.items.length ? section.items : defaultVisibleCategories)
+      .filter((item) => item.title || item.body || item.imageUrl)
+      .map((item, index) => {
+        const fallback = defaultVisibleCategories[index] || {};
+        return {
+          name: item.title || fallback.name || 'Categoría',
+          caption: item.title || fallback.caption || fallback.name,
+          description: item.body || fallback.description || 'Ver selección',
+          image: item.imageUrl || fallback.image || '',
+          linkUrl: item.linkUrl || fallback.linkUrl || item.title || fallback.name,
+        };
+      });
+
+    return (
       <section className="home-section">
         <div className="section-heading compact">
           <div>
-            <h1>Explora nuestras categorías</h1>
+            <h1>{section.title || 'Explora nuestras categorías'}</h1>
+            {section.body && <p>{section.body}</p>}
           </div>
           <button className="text-link-button" type="button" onClick={() => actions.setView('catalog')}>
             Ver todas las categorías
@@ -202,7 +232,7 @@ export function HomeView({ state, actions }) {
                 className="category-tile"
                 type="button"
                 key={category.name}
-                onClick={() => actions.openCommerceCategory(category.name)}
+                onClick={() => openCategoryTile(category)}
               >
                 {category.image ? (
                   <img src={category.image} alt="" />
@@ -216,7 +246,8 @@ export function HomeView({ state, actions }) {
           })}
         </div>
       </section>
-  );
+    );
+  };
 
   const renderFeatured = () => (
       <section className="home-section">
@@ -330,7 +361,7 @@ export function HomeView({ state, actions }) {
   const renderSection = (section) => {
     if (section.type === 'hero') return renderHero();
     if (section.type === 'trust') return renderTrust();
-    if (section.type === 'categories') return renderCategories();
+    if (section.type === 'categories') return renderCategories(section);
     if (section.type === 'featured') return renderFeatured();
     if (section.type === 'productCarousel') return (
       <ProductCarouselSection

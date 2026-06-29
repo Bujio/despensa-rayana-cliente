@@ -1,5 +1,50 @@
 const STORAGE_KEY = 'despensa-rayana-home-content';
 
+const defaultCategoryItems = [
+  {
+    title: 'Alimentación',
+    body: 'Despensa y básicos',
+    imageUrl: 'https://live.staticflickr.com/7052/6970874754_968f8745a0_b.jpg',
+    linkUrl: 'Alimentación',
+  },
+  {
+    title: 'Ibéricos',
+    body: 'Jamones y embutidos',
+    imageUrl: 'https://live.staticflickr.com/3173/3079269863_c72174720d_b.jpg',
+    linkUrl: 'Ibéricos',
+  },
+  {
+    title: 'Quesos',
+    body: 'De cabra, oveja y vaca',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Torta_del_Casar_DOP.jpg',
+    linkUrl: 'Quesos',
+  },
+  {
+    title: 'Dulces y miel',
+    body: 'Tradición dulce',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/8/88/Selection_of_creamed_honey_jars_from_Europe.jpg',
+    linkUrl: 'Dulces y miel',
+  },
+  {
+    title: 'Bebidas',
+    body: 'Vinos, licores y más',
+    imageUrl: 'https://live.staticflickr.com/3510/3212368391_8df6862648_b.jpg',
+    linkUrl: 'Bebidas',
+  },
+  {
+    title: 'Artesanía',
+    body: 'Hecho a mano',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d6/Cork_coaster.jpg',
+    linkUrl: 'Artesanía',
+  },
+  {
+    title: 'Packs regalo',
+    body: 'Sorprende con lo nuestro',
+    imageUrl: 'https://images.unsplash.com/photo-1513885535751-8b9238bd345a?auto=format&fit=crop&w=900&q=80',
+    linkUrl: 'Packs regalo',
+  },
+];
+
 export const defaultHomeContent = {
   hero: {
     eyebrow: 'Origen extremeno - Espiritu rayano',
@@ -13,7 +58,7 @@ export const defaultHomeContent = {
   sections: [
     { id: 'hero', type: 'hero', title: 'Hero principal', enabled: true, locked: true },
     { id: 'trust', type: 'trust', title: 'Mensajes de confianza', enabled: true, locked: true },
-    { id: 'categories', type: 'categories', title: 'Categorias visuales', enabled: true, locked: true },
+    { id: 'categories', type: 'categories', title: 'Explora nuestras categorías', enabled: true, locked: true, items: defaultCategoryItems },
     { id: 'featured', type: 'featured', title: 'Productos destacados', enabled: true, locked: true },
   ],
 };
@@ -23,6 +68,10 @@ function clone(value) {
 }
 
 function normalizeSection(section, index) {
+  const sectionItems = Array.isArray(section.items) ? section.items : [];
+  const items = section.type === 'categories' && sectionItems.length === 0
+    ? clone(defaultCategoryItems)
+    : sectionItems;
   return {
     body: '',
     ctaLabel: '',
@@ -33,7 +82,7 @@ function normalizeSection(section, index) {
     subtitle: '',
     ...section,
     enabled: section.enabled !== false,
-    items: Array.isArray(section.items) ? section.items : [],
+    items,
     productIds: Array.isArray(section.productIds) ? section.productIds.map(String) : [],
     order: Number.isFinite(Number(section.order)) ? Number(section.order) : index,
   };

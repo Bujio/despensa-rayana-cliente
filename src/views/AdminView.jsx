@@ -465,6 +465,21 @@ export function AdminView({ state, actions }) {
                   </>
                 )}
 
+                {selectedHomeSection.type === 'categories' && (
+                  <div className="category-piece-editor">
+                    {(selectedHomeSection.items || []).map((item, itemIndex) => (
+                      <div className="custom-component-editor" key={selectedHomeSection.id + itemIndex}>
+                        <strong>Categoría {itemIndex + 1}</strong>
+                        <label>Título<input value={item.title || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'title', event.target.value)} /></label>
+                        <label>Texto<input value={item.body || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'body', event.target.value)} /></label>
+                        <label>Imagen<input value={item.imageUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'imageUrl', event.target.value)} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
+                        <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('sectionItem.' + selectedHomeSection.id + '.' + itemIndex + '.imageUrl')} disabled={busy} /></label>
+                        <label>Enlace<input value={item.linkUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'linkUrl', event.target.value)} placeholder="Alimentación, catalog, story o https://..." /></label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {selectedHomeSection.type === 'promoBannerGrid' && (
                   <div className="banner-piece-editor">
                     {[0, 1, 2].map((itemIndex) => {
