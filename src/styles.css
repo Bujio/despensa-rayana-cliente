@@ -847,6 +847,75 @@ input[type="file"] {
   line-height: 1.4;
 }
 
+.product-image-editor {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(49, 92, 69, 0.14);
+  border-radius: 12px;
+  background: #fffefa;
+}
+
+.product-image-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.product-image-item {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(49, 92, 69, 0.14);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.product-image-item img {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #efe8d8;
+}
+
+.product-image-item div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.product-image-item strong,
+.product-image-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-image-item span {
+  color: #667064;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.image-url-editor,
+.file-image-editor {
+  padding-top: 12px;
+  border-top: 1px solid rgba(49, 92, 69, 0.14);
+}
+
+.file-image-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.form-button {
+  align-self: end;
+  min-height: 44px;
+}
+
 .component-list,
 .featured-selector,
 .custom-component-panel {

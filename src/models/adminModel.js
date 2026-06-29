@@ -13,6 +13,15 @@ function buildProductPayload(form) {
   if (form.category) payload.category = form.category;
   if (form.supplierName.trim()) payload.supplier.name = form.supplierName.trim();
   if (Array.isArray(form.supplierImages)) payload.supplier.images = form.supplierImages;
+  if (Array.isArray(form.images)) {
+    payload.images = form.images
+      .filter((image) => image?.url?.trim())
+      .map((image) => ({
+        url: image.url.trim(),
+        name: image.name?.trim() || 'Imagen del producto',
+      }))
+      .slice(0, 5);
+  }
 
   if (form.offerType && form.offerType !== 'none') {
     payload.offer = {

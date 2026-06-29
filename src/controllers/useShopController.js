@@ -38,6 +38,7 @@ const initialProductForm = {
   supplierId: '1',
   supplierName: '',
   supplierImages: [],
+  images: [],
   offerType: 'none',
   offerValue: '',
   offerBundleQuantity: '3',
@@ -771,6 +772,34 @@ export function useShopController() {
     setImageForm((current) => ({ ...current, [field]: value }));
   };
 
+  const addProductImageUrl = () => {
+    const imageUrl = imageForm.imageUrl.trim();
+    if (!imageUrl) {
+      setNotice('Pega una URL de imagen valida.');
+      return;
+    }
+
+    const nextImage = {
+      url: imageUrl,
+      name: imageForm.imageName.trim() || 'Imagen del producto',
+    };
+
+    setProductForm((current) => ({
+      ...current,
+      images: [...(Array.isArray(current.images) ? current.images : []), nextImage].slice(-5),
+    }));
+    setImageForm((current) => ({ ...current, imageUrl: '', imageName: '' }));
+    setNotice('Imagen anadida al producto. Guarda el producto para persistir el cambio.');
+  };
+
+  const removeProductFormImage = (imageIndex) => {
+    setProductForm((current) => ({
+      ...current,
+      images: (Array.isArray(current.images) ? current.images : []).filter((_, index) => index !== imageIndex),
+    }));
+    setNotice('Imagen quitada del producto. Guarda el producto para persistir el cambio.');
+  };
+
   const updateHomeHero = (field, value) => {
     saveHomeContent((current) => ({
       ...current,
@@ -921,6 +950,7 @@ export function useShopController() {
       supplierId: product?.supplier?.id ?? '1',
       supplierName: product?.supplier?.name || '',
       supplierImages: Array.isArray(product?.supplier?.images) ? product.supplier.images : [],
+      images: Array.isArray(product?.images) ? product.images : [],
       offerType: offer.active ? offer.type || 'none' : 'none',
       offerValue: offer.value ?? '',
       offerBundleQuantity: offer.bundleQuantity || '3',
@@ -937,6 +967,7 @@ export function useShopController() {
   function resetProductForm() {
     setSelectedAdminProductId('');
     setProductForm({ ...initialProductForm });
+    setImageForm({ ...initialImageForm });
   }
 
   function selectAdminUser(user) {
@@ -1095,8 +1126,12 @@ export function useShopController() {
 
     setBusy(true);
     try {
-      await adminModel.uploadProductImages(request, imageForm.productId, imageForm.files);
+      const updated = await adminModel.uploadProductImages(request, imageForm.productId, imageForm.files);
       setImageForm({ ...initialImageForm, productId: imageForm.productId });
+      setProductForm((current) => ({
+        ...current,
+        images: Array.isArray(updated?.images) ? updated.images : current.images,
+      }));
       await loadProducts();
       await loadFeaturedProducts();
       await loadAdminProducts();
@@ -1253,6 +1288,8 @@ export function useShopController() {
       updateProductForm,
       updateReviewForm,
       updateShippingForm,
+      addProductImageUrl,
+      removeProductFormImage,
       toggleFavorite,
       toggleFeaturedProduct,
       toggleHomeSection,

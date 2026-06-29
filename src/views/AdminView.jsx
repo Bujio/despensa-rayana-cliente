@@ -534,6 +534,54 @@ export function AdminView({ state, actions }) {
               <label className="wide-field">Descripción<textarea value={productForm.description} onChange={updateProduct('description')} placeholder="Origen, elaboración, uso recomendado..." /></label>
             </div>
 
+            <section className="product-image-editor">
+              <div className="admin-panel-title"><ImageUp size={18} /> Imágenes del producto</div>
+              {productForm.images?.length ? (
+                <div className="product-image-grid">
+                  {productForm.images.map((image, index) => (
+                    <article className="product-image-item" key={image.url + index}>
+                      <img src={image.url} alt={image.name || productForm.name || 'Producto'} />
+                      <div>
+                        <strong>{index === 0 ? 'Principal' : image.name || 'Imagen del producto'}</strong>
+                        <span>{image.name || 'Sin nombre'}</span>
+                      </div>
+                      <button
+                        className="icon-button danger-button"
+                        type="button"
+                        onClick={() => actions.removeProductFormImage(index)}
+                        disabled={busy}
+                        title="Eliminar imagen"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state compact-empty">Este producto todavía no tiene imágenes.</div>
+              )}
+
+              <div className="admin-form-grid image-url-editor">
+                <label className="wide-field">URL de imagen<input type="url" value={imageForm.imageUrl} onChange={updateImage('imageUrl')} placeholder="https://..." /></label>
+                <label>Nombre de imagen<input value={imageForm.imageName} onChange={updateImage('imageName')} placeholder="Ej. Vista frontal" /></label>
+                <button className="secondary form-button" type="button" onClick={actions.addProductImageUrl} disabled={busy || !imageForm.imageUrl.trim()}>
+                  <Link size={17} /> Añadir URL
+                </button>
+              </div>
+
+              <div className="file-image-editor">
+                <label>Subir archivo<input type="file" accept="image/*" multiple onChange={updateFiles} disabled={!selectedAdminProductId} /></label>
+                <div className="file-summary">
+                  {selectedAdminProductId
+                    ? (imageForm.files.length ? imageForm.files.map((file) => file.name).join(', ') : 'Subida vía Cloudinary. Máximo 5 imágenes, 5 MB cada una.')
+                    : 'Guarda primero el producto para poder subir archivos.'}
+                </div>
+                <button className="primary full" type="button" onClick={actions.uploadProductImages} disabled={busy || !selectedAdminProductId || imageForm.files.length === 0}>
+                  <ImageUp size={18} /> Subir archivo
+                </button>
+              </div>
+            </section>
+
             <div className="offer-editor">
               <div className="admin-panel-title"><Percent size={18} /> Oferta</div>
               <div className="admin-form-grid">
