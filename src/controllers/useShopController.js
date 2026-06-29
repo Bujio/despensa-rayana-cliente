@@ -827,6 +827,38 @@ export function useShopController() {
     }));
   };
 
+  async function uploadHomeImage(target, files) {
+    const fileList = Array.from(files || []).filter(Boolean);
+    if (!fileList.length) {
+      setNotice('Elige una imagen para subir.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const result = await adminModel.uploadHomeImages(request, fileList.slice(0, 1));
+      const imageUrl = result?.images?.[0]?.url;
+      if (!imageUrl) throw new Error('No se recibió la URL de la imagen.');
+
+      if (target === 'hero.imageUrl') {
+        updateHomeHero('imageUrl', imageUrl);
+      } else if (target.startsWith('component.')) {
+        updateHomeComponentForm(target.replace('component.', ''), imageUrl);
+      } else if (target.startsWith('section.')) {
+        const [, sectionId, field] = target.split('.');
+        updateHomeSection(sectionId, field, imageUrl);
+      }
+
+      setNotice('Imagen subida y asignada.');
+    } catch (error) {
+      setNotice(error.message === 'Internal server error'
+        ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
+        : error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const updateHomeComponentForm = (field, value) => {
     setHomeComponentForm((current) => ({ ...current, [field]: value }));
   };
@@ -882,7 +914,7 @@ export function useShopController() {
     saveHomeContent((current) => ({
       ...current,
       sections: current.sections
-        .filter((section) => section.locked || section.id !== sectionId)
+        .filter((section) => section.id !== sectionId)
         .map((section, order) => ({ ...section, order })),
     }));
   };
@@ -1341,6 +1373,7 @@ export function useShopController() {
       toggleHomeComponentProduct,
       updateHomeHero,
       updateHomeSection,
+      uploadHomeImage,
       updateImageForm,
       updatePaymentForm,
       updateProductForm,

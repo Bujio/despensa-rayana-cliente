@@ -201,6 +201,7 @@ export function AdminView({ state, actions }) {
   const updateUser = (field) => (event) => actions.updateAdminUserForm(field, event.target.value);
   const updateHero = (field) => (event) => actions.updateHomeHero(field, event.target.value);
   const updateComponentForm = (field) => (event) => actions.updateHomeComponentForm(field, event.target.value);
+  const uploadHomeImage = (target) => (event) => actions.uploadHomeImage(target, Array.from(event.target.files || []));
   const sortedHomeSections = [...(homeContent?.sections || [])].sort((first, second) => first.order - second.order);
   const selectedFeaturedIds = homeContent?.featuredProductIds || [];
 
@@ -263,11 +264,9 @@ export function AdminView({ state, actions }) {
                     <button className="icon-button" type="button" onClick={() => actions.moveHomeSection(section.id, 1)} disabled={index === sortedHomeSections.length - 1} title="Bajar">
                       <MoveDown size={16} />
                     </button>
-                    {!section.locked && (
-                      <button className="icon-button danger-button" type="button" onClick={() => actions.deleteHomeSection(section.id)} title="Eliminar componente">
-                        <Trash2 size={16} />
-                      </button>
-                    )}
+                    <button className="icon-button danger-button" type="button" onClick={() => actions.deleteHomeSection(section.id)} title="Eliminar componente">
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </article>
               ))}
@@ -283,7 +282,8 @@ export function AdminView({ state, actions }) {
           <section className="admin-panel home-editor-panel">
             <div className="admin-panel-title"><ImageUp size={19} /> Hero banner</div>
             <div className="admin-form-grid">
-              <label className="wide-field">Imagen principal<input value={homeContent?.hero?.imageUrl || ''} onChange={updateHero('imageUrl')} placeholder="/camino-extremadura.png o https://..." /></label>
+              <label className="wide-field">Imagen principal<input value={homeContent?.hero?.imageUrl || ''} onChange={updateHero('imageUrl')} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
+              <label className="wide-field">Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('hero.imageUrl')} disabled={busy} /></label>
               <label>Etiqueta<input value={homeContent?.hero?.eyebrow || ''} onChange={updateHero('eyebrow')} /></label>
               <label>Título<input value={homeContent?.hero?.title || ''} onChange={updateHero('title')} /></label>
               <label className="wide-field">Descripción<textarea value={homeContent?.hero?.description || ''} onChange={updateHero('description')} /></label>
@@ -345,7 +345,8 @@ export function AdminView({ state, actions }) {
               <label className="wide-field">Texto<textarea value={homeComponentForm.body} onChange={updateComponentForm('body')} placeholder="Mensaje para la portada manteniendo el tono de Despensa Rayana" /></label>
               {(homeComponentForm.type === 'promoBanner' || homeComponentForm.type === 'custom') && (
                 <>
-                  <label className="wide-field">Imagen<input value={homeComponentForm.imageUrl} onChange={updateComponentForm('imageUrl')} placeholder="https://... o /imagen.jpg" /></label>
+                  <label className="wide-field">Imagen<input value={homeComponentForm.imageUrl} onChange={updateComponentForm('imageUrl')} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
+                  <label className="wide-field">Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('component.imageUrl')} disabled={busy} /></label>
                   <label>Enlace<input value={homeComponentForm.linkUrl} onChange={updateComponentForm('linkUrl')} placeholder="catalog, story o https://..." /></label>
                   <label>Texto del botón<input value={homeComponentForm.ctaLabel} onChange={updateComponentForm('ctaLabel')} placeholder="Ej. Ver selección" /></label>
                 </>
@@ -384,7 +385,8 @@ export function AdminView({ state, actions }) {
                       <strong>Pieza {itemNumber}</strong>
                       <label>Título<input value={homeComponentForm[prefix + 'Title']} onChange={updateComponentForm(prefix + 'Title')} /></label>
                       <label>Texto<textarea value={homeComponentForm[prefix + 'Body']} onChange={updateComponentForm(prefix + 'Body')} /></label>
-                      <label>Imagen<input value={homeComponentForm[prefix + 'ImageUrl']} onChange={updateComponentForm(prefix + 'ImageUrl')} placeholder="https://... o /imagen.jpg" /></label>
+                      <label>Imagen<input value={homeComponentForm[prefix + 'ImageUrl']} onChange={updateComponentForm(prefix + 'ImageUrl')} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
+                      <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('component.' + prefix + 'ImageUrl')} disabled={busy} /></label>
                       <label>Enlace<input value={homeComponentForm[prefix + 'LinkUrl']} onChange={updateComponentForm(prefix + 'LinkUrl')} placeholder="catalog, story o https://..." /></label>
                     </div>
                   );
@@ -408,6 +410,7 @@ export function AdminView({ state, actions }) {
                   {(section.type === 'promoBanner' || section.type === 'custom') && (
                     <>
                       <label>Imagen<input value={section.imageUrl || ''} onChange={(event) => actions.updateHomeSection(section.id, 'imageUrl', event.target.value)} /></label>
+                      <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('section.' + section.id + '.imageUrl')} disabled={busy} /></label>
                       <label>Enlace<input value={section.linkUrl || ''} onChange={(event) => actions.updateHomeSection(section.id, 'linkUrl', event.target.value)} /></label>
                       <label>Texto del botón<input value={section.ctaLabel || ''} onChange={(event) => actions.updateHomeSection(section.id, 'ctaLabel', event.target.value)} /></label>
                     </>

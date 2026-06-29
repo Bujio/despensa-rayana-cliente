@@ -141,6 +141,16 @@ export const adminModel = {
     });
   },
 
+  uploadHomeImages(request, files) {
+    const formData = new FormData();
+    files.slice(0, 5).forEach((file) => formData.append('images', file));
+
+    return request('/home-content/images', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
   saveImageUrl(request, product, imageUrl, imageName) {
     const currentImages = Array.isArray(product.images) ? product.images : [];
     const nextImage = {
