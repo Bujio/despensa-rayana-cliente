@@ -65,9 +65,26 @@ const initialImageForm = {
 };
 
 const initialHomeComponentForm = {
+  type: 'promoBanner',
   title: '',
   subtitle: '',
   body: '',
+  imageUrl: '',
+  linkUrl: '',
+  ctaLabel: '',
+  productIds: [],
+  itemOneTitle: '',
+  itemOneBody: '',
+  itemOneImageUrl: '',
+  itemOneLinkUrl: '',
+  itemTwoTitle: '',
+  itemTwoBody: '',
+  itemTwoImageUrl: '',
+  itemTwoLinkUrl: '',
+  itemThreeTitle: '',
+  itemThreeBody: '',
+  itemThreeImageUrl: '',
+  itemThreeLinkUrl: '',
 };
 
 const initialAdminUserForm = {
@@ -814,6 +831,20 @@ export function useShopController() {
     setHomeComponentForm((current) => ({ ...current, [field]: value }));
   };
 
+  const toggleHomeComponentProduct = (product) => {
+    const productId = getProductId(product);
+    if (!productId) return;
+    setHomeComponentForm((current) => {
+      const selected = current.productIds.includes(productId);
+      return {
+        ...current,
+        productIds: selected
+          ? current.productIds.filter((id) => id !== productId)
+          : [...current.productIds, productId],
+      };
+    });
+  };
+
   const updateHomeSection = (sectionId, field, value) => {
     saveHomeContent((current) => ({
       ...current,
@@ -877,16 +908,42 @@ export function useShopController() {
       setNotice('Indica un titulo para el componente.');
       return;
     }
+    const bannerItems = [
+      {
+        title: homeComponentForm.itemOneTitle.trim(),
+        body: homeComponentForm.itemOneBody.trim(),
+        imageUrl: homeComponentForm.itemOneImageUrl.trim(),
+        linkUrl: homeComponentForm.itemOneLinkUrl.trim(),
+      },
+      {
+        title: homeComponentForm.itemTwoTitle.trim(),
+        body: homeComponentForm.itemTwoBody.trim(),
+        imageUrl: homeComponentForm.itemTwoImageUrl.trim(),
+        linkUrl: homeComponentForm.itemTwoLinkUrl.trim(),
+      },
+      {
+        title: homeComponentForm.itemThreeTitle.trim(),
+        body: homeComponentForm.itemThreeBody.trim(),
+        imageUrl: homeComponentForm.itemThreeImageUrl.trim(),
+        linkUrl: homeComponentForm.itemThreeLinkUrl.trim(),
+      },
+    ].filter((item) => item.title || item.body || item.imageUrl || item.linkUrl);
+
     saveHomeContent((current) => ({
       ...current,
       sections: [
         ...current.sections,
         {
           id: 'custom-' + Date.now(),
-          type: 'custom',
+          type: homeComponentForm.type,
           title,
           subtitle: homeComponentForm.subtitle.trim(),
           body: homeComponentForm.body.trim(),
+          ctaLabel: homeComponentForm.ctaLabel.trim(),
+          imageUrl: homeComponentForm.imageUrl.trim(),
+          items: bannerItems,
+          linkUrl: homeComponentForm.linkUrl.trim(),
+          productIds: homeComponentForm.productIds,
           enabled: true,
           locked: false,
           order: current.sections.length,
@@ -1281,6 +1338,7 @@ export function useShopController() {
       updateCartItem,
       updateCategoryForm,
       updateHomeComponentForm,
+      toggleHomeComponentProduct,
       updateHomeHero,
       updateHomeSection,
       updateImageForm,

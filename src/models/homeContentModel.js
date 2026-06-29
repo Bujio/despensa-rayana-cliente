@@ -25,9 +25,16 @@ function clone(value) {
 function normalizeSection(section, index) {
   return {
     body: '',
+    ctaLabel: '',
+    imageUrl: '',
+    items: [],
+    linkUrl: '',
+    productIds: [],
     subtitle: '',
     ...section,
     enabled: section.enabled !== false,
+    items: Array.isArray(section.items) ? section.items : [],
+    productIds: Array.isArray(section.productIds) ? section.productIds.map(String) : [],
     order: Number.isFinite(Number(section.order)) ? Number(section.order) : index,
   };
 }

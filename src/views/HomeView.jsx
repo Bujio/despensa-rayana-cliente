@@ -23,6 +23,75 @@ function getProductId(product) {
   return String(product?._id || product?.id || product?.sku || '');
 }
 
+function ProductCarouselSection({
+  actions,
+  busy,
+  favoriteIds,
+  products,
+  reservedBySku,
+  section,
+}) {
+  const carouselRef = useRef(null);
+  const sectionProducts = products
+    .filter((product) => productModel.getImage(product))
+    .filter((product) => !section.productIds?.length || section.productIds.includes(getProductId(product)));
+
+  const scroll = (direction) => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+    const firstCard = carousel.querySelector('.product-card');
+    if (!firstCard) return;
+    const gap = Number.parseFloat(getComputedStyle(carousel).columnGap || getComputedStyle(carousel).gap || '0') || 0;
+    const step = firstCard.getBoundingClientRect().width + gap;
+    const maxScroll = carousel.scrollWidth - carousel.clientWidth;
+    const atStart = carousel.scrollLeft <= 2;
+    const atEnd = carousel.scrollLeft >= maxScroll - 2;
+    let nextLeft = carousel.scrollLeft + direction * step;
+    if (direction < 0 && atStart) nextLeft = maxScroll;
+    if (direction > 0 && atEnd) nextLeft = 0;
+    carousel.scrollTo({ left: Math.max(0, Math.min(maxScroll, nextLeft)), behavior: 'smooth' });
+  };
+
+  return (
+    <section className="home-section">
+      <div className="section-heading compact">
+        <div>
+          {section.subtitle && <span className="eyebrow">{section.subtitle}</span>}
+          <h1>{section.title}</h1>
+          {section.body && <p>{section.body}</p>}
+        </div>
+        <button className="secondary" type="button" onClick={() => actions.setView('catalog')}>Ver catálogo</button>
+      </div>
+      {sectionProducts.length ? (
+        <div className="featured-carousel-shell">
+          <button className="carousel-control" type="button" onClick={() => scroll(-1)} aria-label="Ver productos anteriores">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="featured-carousel" ref={carouselRef} tabIndex={0} aria-label={section.title}>
+            {sectionProducts.map((product) => (
+              <ProductCard
+                key={product._id || product.id || product.sku}
+                product={product}
+                busy={busy}
+                isFavorite={favoriteIds.includes(getProductId(product))}
+                reservedBySku={reservedBySku}
+                onAdd={actions.addToCart}
+                onOpen={actions.openProduct}
+                onToggleFavorite={actions.toggleFavorite}
+              />
+            ))}
+          </div>
+          <button className="carousel-control" type="button" onClick={() => scroll(1)} aria-label="Ver más productos">
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      ) : (
+        <div className="empty-state compact-empty">Selecciona productos para este carrusel desde Gestión.</div>
+      )}
+    </section>
+  );
+}
+
 export function HomeView({ state, actions }) {
   const featuredCarouselRef = useRef(null);
   const {
@@ -200,11 +269,72 @@ export function HomeView({ state, actions }) {
     </section>
   );
 
+  const openSectionLink = (linkUrl) => {
+    if (!linkUrl) {
+      actions.setView('catalog');
+      return;
+    }
+    if (linkUrl.startsWith('http')) {
+      window.open(linkUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    actions.setView(linkUrl.replace('#', '') || 'catalog');
+  };
+
+  const renderPromoBanner = (section) => (
+    <section className="promo-banner-section">
+      {section.imageUrl && <img src={section.imageUrl} alt="" />}
+      <div>
+        {section.subtitle && <span className="eyebrow">{section.subtitle}</span>}
+        <h1>{section.title}</h1>
+        {section.body && <p>{section.body}</p>}
+        <button className="primary" type="button" onClick={() => openSectionLink(section.linkUrl)}>
+          {section.ctaLabel || 'Ver selección'} <ArrowRight size={18} />
+        </button>
+      </div>
+    </section>
+  );
+
+  const renderPromoBannerGrid = (section) => (
+    <section className="home-section">
+      <div className="section-heading compact">
+        <div>
+          {section.subtitle && <span className="eyebrow">{section.subtitle}</span>}
+          <h1>{section.title}</h1>
+          {section.body && <p>{section.body}</p>}
+        </div>
+      </div>
+      <div className="promo-banner-grid">
+        {(section.items || []).map((item, index) => (
+          <button className="promo-banner-card" type="button" key={(item.title || 'banner') + index} onClick={() => openSectionLink(item.linkUrl)}>
+            {item.imageUrl && <img src={item.imageUrl} alt="" />}
+            <span>
+              <strong>{item.title || 'Promoción'}</strong>
+              {item.body && <small>{item.body}</small>}
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+
   const renderSection = (section) => {
     if (section.type === 'hero') return renderHero();
     if (section.type === 'trust') return renderTrust();
     if (section.type === 'categories') return renderCategories();
     if (section.type === 'featured') return renderFeatured();
+    if (section.type === 'productCarousel') return (
+      <ProductCarouselSection
+        actions={actions}
+        busy={busy}
+        favoriteIds={favoriteIds}
+        products={featuredProducts}
+        reservedBySku={reservedBySku}
+        section={section}
+      />
+    );
+    if (section.type === 'promoBanner') return renderPromoBanner(section);
+    if (section.type === 'promoBannerGrid') return renderPromoBannerGrid(section);
     return renderCustomSection(section);
   };
 

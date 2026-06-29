@@ -57,6 +57,16 @@ function getRoleLabel(role) {
   return role === 'admin' ? 'Admin' : 'Cliente';
 }
 
+function getHomeSectionTypeLabel(type) {
+  const labels = {
+    custom: 'Bloque editorial',
+    productCarousel: 'Carrusel de productos',
+    promoBanner: 'Banner promocional',
+    promoBannerGrid: 'Bloque de banners',
+  };
+  return labels[type] || 'Componente base';
+}
+
 function OrderDetail({ order }) {
   if (!order) return <div className="empty-state compact-empty">Selecciona un pedido para ver todos sus detalles.</div>;
 
@@ -244,7 +254,7 @@ export function AdminView({ state, actions }) {
                 <article className={'component-row' + (section.enabled ? '' : ' muted')} key={section.id}>
                   <button className="component-main" type="button" onClick={() => actions.toggleHomeSection(section.id)}>
                     <strong>{section.title}</strong>
-                    <span>{section.type === 'custom' ? 'Bloque editorial' : 'Componente base'} · {section.enabled ? 'Visible' : 'Oculto'}</span>
+                    <span>{getHomeSectionTypeLabel(section.type)} · {section.enabled ? 'Visible' : 'Oculto'}</span>
                   </button>
                   <div className="component-actions">
                     <button className="icon-button" type="button" onClick={() => actions.moveHomeSection(section.id, -1)} disabled={index === 0} title="Subir">
@@ -321,27 +331,91 @@ export function AdminView({ state, actions }) {
           <form className="admin-panel component-builder-panel" onSubmit={actions.createHomeComponent}>
             <div className="admin-panel-title"><Plus size={19} /> Nuevo componente</div>
             <div className="admin-form-grid">
+              <label>
+                Tipo de componente
+                <select value={homeComponentForm.type} onChange={updateComponentForm('type')}>
+                  <option value="promoBanner">Banner promocional ancho</option>
+                  <option value="promoBannerGrid">Bloque de banners promocionales</option>
+                  <option value="productCarousel">Carrusel de productos</option>
+                  <option value="custom">Bloque editorial simple</option>
+                </select>
+              </label>
               <label>Título<input required value={homeComponentForm.title} onChange={updateComponentForm('title')} placeholder="Ej. Temporada de la dehesa" /></label>
               <label>Subtítulo<input value={homeComponentForm.subtitle} onChange={updateComponentForm('subtitle')} placeholder="Ej. Selección editorial" /></label>
               <label className="wide-field">Texto<textarea value={homeComponentForm.body} onChange={updateComponentForm('body')} placeholder="Mensaje para la portada manteniendo el tono de Despensa Rayana" /></label>
+              {(homeComponentForm.type === 'promoBanner' || homeComponentForm.type === 'custom') && (
+                <>
+                  <label className="wide-field">Imagen<input value={homeComponentForm.imageUrl} onChange={updateComponentForm('imageUrl')} placeholder="https://... o /imagen.jpg" /></label>
+                  <label>Enlace<input value={homeComponentForm.linkUrl} onChange={updateComponentForm('linkUrl')} placeholder="catalog, story o https://..." /></label>
+                  <label>Texto del botón<input value={homeComponentForm.ctaLabel} onChange={updateComponentForm('ctaLabel')} placeholder="Ej. Ver selección" /></label>
+                </>
+              )}
             </div>
+            {homeComponentForm.type === 'productCarousel' && (
+              <div className="component-product-picker">
+                {adminProducts.map((product) => {
+                  const productId = String(getId(product) || product.sku);
+                  const image = productModel.getImage(product);
+                  return (
+                    <label className="featured-selector-row" key={productId}>
+                      <input
+                        type="checkbox"
+                        checked={homeComponentForm.productIds.includes(productId)}
+                        onChange={() => actions.toggleHomeComponentProduct(product)}
+                      />
+                      <span className="admin-thumb small-thumb">
+                        {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
+                      </span>
+                      <span>
+                        <strong>{product.name}</strong>
+                        <small>{product.sku} · {formatCurrency(product.price)}</small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            {homeComponentForm.type === 'promoBannerGrid' && (
+              <div className="banner-piece-editor">
+                {[1, 2, 3].map((itemNumber) => {
+                  const prefix = itemNumber === 1 ? 'itemOne' : itemNumber === 2 ? 'itemTwo' : 'itemThree';
+                  return (
+                    <div className="custom-component-editor" key={prefix}>
+                      <strong>Pieza {itemNumber}</strong>
+                      <label>Título<input value={homeComponentForm[prefix + 'Title']} onChange={updateComponentForm(prefix + 'Title')} /></label>
+                      <label>Texto<textarea value={homeComponentForm[prefix + 'Body']} onChange={updateComponentForm(prefix + 'Body')} /></label>
+                      <label>Imagen<input value={homeComponentForm[prefix + 'ImageUrl']} onChange={updateComponentForm(prefix + 'ImageUrl')} placeholder="https://... o /imagen.jpg" /></label>
+                      <label>Enlace<input value={homeComponentForm[prefix + 'LinkUrl']} onChange={updateComponentForm(prefix + 'LinkUrl')} placeholder="catalog, story o https://..." /></label>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <button className="primary full" type="submit" disabled={busy}>
               <Save size={18} /> Añadir componente
             </button>
           </form>
 
           <section className="admin-panel custom-component-panel">
-            <div className="admin-panel-title"><LayoutDashboard size={19} /> Bloques editoriales</div>
-            {sortedHomeSections.filter((section) => section.type === 'custom').length ? (
-              sortedHomeSections.filter((section) => section.type === 'custom').map((section) => (
+            <div className="admin-panel-title"><LayoutDashboard size={19} /> Componentes personalizados</div>
+            {sortedHomeSections.filter((section) => !section.locked).length ? (
+              sortedHomeSections.filter((section) => !section.locked).map((section) => (
                 <div className="custom-component-editor" key={section.id}>
+                  <strong>{getHomeSectionTypeLabel(section.type)}</strong>
                   <label>Título<input value={section.title || ''} onChange={(event) => actions.updateHomeSection(section.id, 'title', event.target.value)} /></label>
                   <label>Subtítulo<input value={section.subtitle || ''} onChange={(event) => actions.updateHomeSection(section.id, 'subtitle', event.target.value)} /></label>
                   <label>Texto<textarea value={section.body || ''} onChange={(event) => actions.updateHomeSection(section.id, 'body', event.target.value)} /></label>
+                  {(section.type === 'promoBanner' || section.type === 'custom') && (
+                    <>
+                      <label>Imagen<input value={section.imageUrl || ''} onChange={(event) => actions.updateHomeSection(section.id, 'imageUrl', event.target.value)} /></label>
+                      <label>Enlace<input value={section.linkUrl || ''} onChange={(event) => actions.updateHomeSection(section.id, 'linkUrl', event.target.value)} /></label>
+                      <label>Texto del botón<input value={section.ctaLabel || ''} onChange={(event) => actions.updateHomeSection(section.id, 'ctaLabel', event.target.value)} /></label>
+                    </>
+                  )}
                 </div>
               ))
             ) : (
-              <div className="empty-state compact-empty">Todavía no hay bloques editoriales adicionales.</div>
+              <div className="empty-state compact-empty">Todavía no hay componentes adicionales.</div>
             )}
           </section>
         </div>
