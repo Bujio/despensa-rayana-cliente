@@ -766,6 +766,13 @@ input:focus, select:focus { border-color: #315c45; box-shadow: 0 0 0 3px rgba(49
   align-items: start;
 }
 
+.homepage-admin-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.86fr) minmax(480px, 1.14fr);
+  gap: 18px;
+  align-items: start;
+}
+
 .admin-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.5fr);
@@ -840,10 +847,97 @@ input[type="file"] {
   line-height: 1.4;
 }
 
+.component-list,
+.featured-selector,
+.custom-component-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.component-row,
+.featured-selector-row,
+.hero-admin-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(49, 92, 69, 0.14);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.component-row.muted {
+  opacity: 0.58;
+}
+
+.component-main {
+  display: grid;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.component-main strong,
+.featured-selector-row strong {
+  color: #1e2a22;
+}
+
+.component-main span,
+.featured-selector-row small,
+.hero-admin-preview span {
+  color: #667064;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.component-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.featured-selector {
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.featured-selector-row {
+  grid-template-columns: auto 44px minmax(0, 1fr);
+}
+
+.small-thumb {
+  width: 44px;
+  height: 44px;
+}
+
+.hero-admin-preview {
+  grid-template-columns: 140px minmax(0, 1fr);
+}
+
+.hero-admin-preview img {
+  width: 100%;
+  aspect-ratio: 1.55;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.custom-component-editor {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(49, 92, 69, 0.14);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
 @media (max-width: 1060px) {
   .topbar { grid-template-columns: 1fr; }
   .top-actions { justify-content: flex-start; }
-  .catalog-layout, .split-view, .admin-grid, .admin-users-layout, .admin-products-layout, .product-detail-layout { grid-template-columns: 1fr; }
+  .catalog-layout, .split-view, .admin-grid, .admin-users-layout, .admin-products-layout, .homepage-admin-layout, .product-detail-layout { grid-template-columns: 1fr; }
   .filters-panel, .checkout-panel { position: static; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .product-detail-media { min-height: 420px; }
@@ -1462,7 +1556,7 @@ main {
   background:
     linear-gradient(90deg, rgba(247, 243, 234, 0.92) 0%, rgba(247, 243, 234, 0.76) 33%, rgba(247, 243, 234, 0.28) 58%, rgba(30, 42, 34, 0.16) 100%),
     linear-gradient(180deg, rgba(255, 253, 248, 0.05), rgba(35, 79, 54, 0.16)),
-    url("/camino-extremadura.png") center/cover;
+    var(--hero-image, url("/camino-extremadura.png")) center/cover;
   box-shadow: var(--shadow-soft);
   overflow: hidden;
 }
@@ -1589,6 +1683,32 @@ main {
 .home-section {
   display: grid;
   gap: 18px;
+}
+
+.home-component-slot {
+  display: grid;
+}
+
+.custom-home-band {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: clamp(22px, 4vw, 34px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 253, 248, 0.9);
+  box-shadow: var(--shadow-card);
+}
+
+.custom-home-band h1 {
+  margin: 0;
+  color: var(--color-forest-dark);
+}
+
+.custom-home-band p {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: var(--color-muted);
+  line-height: 1.6;
 }
 
 .category-showcase {

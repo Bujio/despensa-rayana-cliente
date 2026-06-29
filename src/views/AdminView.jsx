@@ -3,11 +3,15 @@ import {
   ChevronRight,
   Eye,
   ImageUp,
+  LayoutDashboard,
   Link,
   MessageSquare,
+  MoveDown,
+  MoveUp,
   PackagePlus,
   Percent,
   Plus,
+  RotateCcw,
   Save,
   Search,
   ShoppingBag,
@@ -78,6 +82,7 @@ function OrderDetail({ order }) {
 
 function AdminTabs({ active, actions }) {
   const tabs = [
+    ['homepage', LayoutDashboard, 'Portada'],
     ['users', Users, 'Clientes'],
     ['products', PackagePlus, 'Productos'],
     ['categories', Tags, 'Categorías'],
@@ -112,6 +117,8 @@ export function AdminView({ state, actions }) {
     busy,
     categories,
     categoryForm,
+    homeComponentForm,
+    homeContent,
     imageForm,
     orders,
     productForm,
@@ -148,27 +155,6 @@ export function AdminView({ state, actions }) {
     }
   }, [adminProductsPage, productTotalPages]);
 
-  if (session?.user?.role !== 'admin') {
-    return (
-      <section className="wide-panel single">
-        <div className="empty-state">Necesitas entrar como administrador para gestionar el backoffice.</div>
-      </section>
-    );
-  }
-
-  const updateCategory = (field) => (event) => actions.updateCategoryForm(field, event.target.value);
-  const updateProduct = (field) => (event) => actions.updateProductForm(field, event.target.value);
-  const updateImage = (field) => (event) => actions.updateImageForm(field, event.target.value);
-  const updateFiles = (event) => actions.updateImageForm('files', Array.from(event.target.files || []));
-  const updateUser = (field) => (event) => actions.updateAdminUserForm(field, event.target.value);
-
-  const filteredUsers = adminUsers.filter((user) => includesSearch([
-    user.name,
-    user.email,
-    user.phone,
-    getRoleLabel(user.role),
-  ], adminSearch.users));
-
   const filteredCategories = categories.filter((category) => includesSearch([
     category.name,
     category.slug,
@@ -189,6 +175,31 @@ export function AdminView({ state, actions }) {
       setAdminCategoriesPage(categoryTotalPages);
     }
   }, [adminCategoriesPage, categoryTotalPages]);
+
+  if (session?.user?.role !== 'admin') {
+    return (
+      <section className="wide-panel single">
+        <div className="empty-state">Necesitas entrar como administrador para gestionar el backoffice.</div>
+      </section>
+    );
+  }
+
+  const updateCategory = (field) => (event) => actions.updateCategoryForm(field, event.target.value);
+  const updateProduct = (field) => (event) => actions.updateProductForm(field, event.target.value);
+  const updateImage = (field) => (event) => actions.updateImageForm(field, event.target.value);
+  const updateFiles = (event) => actions.updateImageForm('files', Array.from(event.target.files || []));
+  const updateUser = (field) => (event) => actions.updateAdminUserForm(field, event.target.value);
+  const updateHero = (field) => (event) => actions.updateHomeHero(field, event.target.value);
+  const updateComponentForm = (field) => (event) => actions.updateHomeComponentForm(field, event.target.value);
+  const sortedHomeSections = [...(homeContent?.sections || [])].sort((first, second) => first.order - second.order);
+  const selectedFeaturedIds = homeContent?.featuredProductIds || [];
+
+  const filteredUsers = adminUsers.filter((user) => includesSearch([
+    user.name,
+    user.email,
+    user.phone,
+    getRoleLabel(user.role),
+  ], adminSearch.users));
 
   const filteredOrders = orders.filter((order) => includesSearch([
     getId(order),
@@ -223,6 +234,115 @@ export function AdminView({ state, actions }) {
       </div>
 
       <AdminTabs active={adminTab} actions={actions} />
+
+      {adminTab === 'homepage' && (
+        <div className="homepage-admin-layout">
+          <section className="admin-panel component-library">
+            <div className="admin-panel-title"><LayoutDashboard size={19} /> Componentes de portada</div>
+            <div className="component-list">
+              {sortedHomeSections.map((section, index) => (
+                <article className={'component-row' + (section.enabled ? '' : ' muted')} key={section.id}>
+                  <button className="component-main" type="button" onClick={() => actions.toggleHomeSection(section.id)}>
+                    <strong>{section.title}</strong>
+                    <span>{section.type === 'custom' ? 'Bloque editorial' : 'Componente base'} · {section.enabled ? 'Visible' : 'Oculto'}</span>
+                  </button>
+                  <div className="component-actions">
+                    <button className="icon-button" type="button" onClick={() => actions.moveHomeSection(section.id, -1)} disabled={index === 0} title="Subir">
+                      <MoveUp size={16} />
+                    </button>
+                    <button className="icon-button" type="button" onClick={() => actions.moveHomeSection(section.id, 1)} disabled={index === sortedHomeSections.length - 1} title="Bajar">
+                      <MoveDown size={16} />
+                    </button>
+                    {!section.locked && (
+                      <button className="icon-button danger-button" type="button" onClick={() => actions.deleteHomeSection(section.id)} title="Eliminar componente">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+            <button className="secondary full" type="button" onClick={actions.resetHomeContent}>
+              <RotateCcw size={17} /> Restablecer portada
+            </button>
+          </section>
+
+          <section className="admin-panel home-editor-panel">
+            <div className="admin-panel-title"><ImageUp size={19} /> Hero banner</div>
+            <div className="admin-form-grid">
+              <label className="wide-field">Imagen principal<input value={homeContent?.hero?.imageUrl || ''} onChange={updateHero('imageUrl')} placeholder="/camino-extremadura.png o https://..." /></label>
+              <label>Etiqueta<input value={homeContent?.hero?.eyebrow || ''} onChange={updateHero('eyebrow')} /></label>
+              <label>Título<input value={homeContent?.hero?.title || ''} onChange={updateHero('title')} /></label>
+              <label className="wide-field">Descripción<textarea value={homeContent?.hero?.description || ''} onChange={updateHero('description')} /></label>
+              <label>Botón principal<input value={homeContent?.hero?.primaryLabel || ''} onChange={updateHero('primaryLabel')} /></label>
+              <label>Botón secundario<input value={homeContent?.hero?.secondaryLabel || ''} onChange={updateHero('secondaryLabel')} /></label>
+            </div>
+            {homeContent?.hero?.imageUrl && (
+              <div className="hero-admin-preview">
+                <img src={homeContent.hero.imageUrl} alt="" />
+                <div>
+                  <strong>{homeContent.hero.title}</strong>
+                  <span>{homeContent.hero.description}</span>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="admin-panel featured-selector-panel">
+            <div className="admin-panel-title"><ShoppingBag size={19} /> Carrusel de productos</div>
+            <div className="soft-note">Seleccionados: {selectedFeaturedIds.length || 'todos los productos con imagen'}</div>
+            <div className="featured-selector">
+              {adminProducts.map((product) => {
+                const productId = getId(product) || product.sku;
+                const image = productModel.getImage(product);
+                return (
+                  <label className="featured-selector-row" key={productId}>
+                    <input
+                      type="checkbox"
+                      checked={selectedFeaturedIds.includes(String(productId))}
+                      onChange={() => actions.toggleFeaturedProduct(product)}
+                    />
+                    <span className="admin-thumb small-thumb">
+                      {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
+                    </span>
+                    <span>
+                      <strong>{product.name}</strong>
+                      <small>{product.sku} · {formatCurrency(product.price)}</small>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+
+          <form className="admin-panel component-builder-panel" onSubmit={actions.createHomeComponent}>
+            <div className="admin-panel-title"><Plus size={19} /> Nuevo componente</div>
+            <div className="admin-form-grid">
+              <label>Título<input required value={homeComponentForm.title} onChange={updateComponentForm('title')} placeholder="Ej. Temporada de la dehesa" /></label>
+              <label>Subtítulo<input value={homeComponentForm.subtitle} onChange={updateComponentForm('subtitle')} placeholder="Ej. Selección editorial" /></label>
+              <label className="wide-field">Texto<textarea value={homeComponentForm.body} onChange={updateComponentForm('body')} placeholder="Mensaje para la portada manteniendo el tono de Despensa Rayana" /></label>
+            </div>
+            <button className="primary full" type="submit" disabled={busy}>
+              <Save size={18} /> Añadir componente
+            </button>
+          </form>
+
+          <section className="admin-panel custom-component-panel">
+            <div className="admin-panel-title"><LayoutDashboard size={19} /> Bloques editoriales</div>
+            {sortedHomeSections.filter((section) => section.type === 'custom').length ? (
+              sortedHomeSections.filter((section) => section.type === 'custom').map((section) => (
+                <div className="custom-component-editor" key={section.id}>
+                  <label>Título<input value={section.title || ''} onChange={(event) => actions.updateHomeSection(section.id, 'title', event.target.value)} /></label>
+                  <label>Subtítulo<input value={section.subtitle || ''} onChange={(event) => actions.updateHomeSection(section.id, 'subtitle', event.target.value)} /></label>
+                  <label>Texto<textarea value={section.body || ''} onChange={(event) => actions.updateHomeSection(section.id, 'body', event.target.value)} /></label>
+                </div>
+              ))
+            ) : (
+              <div className="empty-state compact-empty">Todavía no hay bloques editoriales adicionales.</div>
+            )}
+          </section>
+        </div>
+      )}
 
       {adminTab === 'users' && (
         <div className="admin-users-layout">

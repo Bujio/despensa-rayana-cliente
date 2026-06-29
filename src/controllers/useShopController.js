@@ -7,6 +7,7 @@ import { catalogModel } from '../models/catalogModel.js';
 import { categoryVisualModel } from '../models/categoryVisualModel.js';
 import { emptyFilters, productModel } from '../models/productModel.js';
 import { favoritesModel } from '../models/favoritesModel.js';
+import { homeContentModel } from '../models/homeContentModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { sessionModel } from '../models/sessionModel.js';
 import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
@@ -60,6 +61,12 @@ const initialImageForm = {
   files: [],
   imageUrl: '',
   imageName: '',
+};
+
+const initialHomeComponentForm = {
+  title: '',
+  subtitle: '',
+  body: '',
 };
 
 const initialAdminUserForm = {
@@ -165,6 +172,8 @@ export function useShopController() {
   const [categoryForm, setCategoryForm] = useState(() => ({ ...initialCategoryForm }));
   const [productForm, setProductForm] = useState(() => ({ ...initialProductForm }));
   const [imageForm, setImageForm] = useState(() => ({ ...initialImageForm }));
+  const [homeContent, setHomeContent] = useState(() => homeContentModel.load());
+  const [homeComponentForm, setHomeComponentForm] = useState(() => ({ ...initialHomeComponentForm }));
   const [checkoutStep, setCheckoutStep] = useState('items');
   const [shippingForm, setShippingForm] = useState(() => getShippingDefaults(session));
   const [paymentForm, setPaymentForm] = useState(() => ({ ...initialPaymentForm }));
@@ -204,6 +213,13 @@ export function useShopController() {
     () => orders.find((order) => (order._id || order.id) === selectedAdminOrderId) || null,
     [orders, selectedAdminOrderId],
   );
+
+  const saveHomeContent = (updater) => {
+    setHomeContent((current) => {
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      return homeContentModel.save(next);
+    });
+  };
 
   const applySession = (nextSession) => {
     setSession(nextSession);
@@ -746,6 +762,109 @@ export function useShopController() {
     setImageForm((current) => ({ ...current, [field]: value }));
   };
 
+  const updateHomeHero = (field, value) => {
+    saveHomeContent((current) => ({
+      ...current,
+      hero: {
+        ...current.hero,
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateHomeComponentForm = (field, value) => {
+    setHomeComponentForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateHomeSection = (sectionId, field, value) => {
+    saveHomeContent((current) => ({
+      ...current,
+      sections: current.sections.map((section) => (
+        section.id === sectionId ? { ...section, [field]: value } : section
+      )),
+    }));
+  };
+
+  const toggleHomeSection = (sectionId) => {
+    saveHomeContent((current) => ({
+      ...current,
+      sections: current.sections.map((section) => (
+        section.id === sectionId ? { ...section, enabled: !section.enabled } : section
+      )),
+    }));
+  };
+
+  const moveHomeSection = (sectionId, direction) => {
+    saveHomeContent((current) => {
+      const sections = [...current.sections].sort((first, second) => first.order - second.order);
+      const index = sections.findIndex((section) => section.id === sectionId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= sections.length) return current;
+      const [section] = sections.splice(index, 1);
+      sections.splice(nextIndex, 0, section);
+      return {
+        ...current,
+        sections: sections.map((item, order) => ({ ...item, order })),
+      };
+    });
+  };
+
+  const deleteHomeSection = (sectionId) => {
+    saveHomeContent((current) => ({
+      ...current,
+      sections: current.sections
+        .filter((section) => section.locked || section.id !== sectionId)
+        .map((section, order) => ({ ...section, order })),
+    }));
+  };
+
+  const toggleFeaturedProduct = (product) => {
+    const productId = getProductId(product);
+    if (!productId) return;
+    saveHomeContent((current) => {
+      const selected = current.featuredProductIds.includes(productId);
+      return {
+        ...current,
+        featuredProductIds: selected
+          ? current.featuredProductIds.filter((id) => id !== productId)
+          : [...current.featuredProductIds, productId],
+      };
+    });
+  };
+
+  const createHomeComponent = (event) => {
+    event.preventDefault();
+    const title = homeComponentForm.title.trim();
+    if (!title) {
+      setNotice('Indica un titulo para el componente.');
+      return;
+    }
+    saveHomeContent((current) => ({
+      ...current,
+      sections: [
+        ...current.sections,
+        {
+          id: 'custom-' + Date.now(),
+          type: 'custom',
+          title,
+          subtitle: homeComponentForm.subtitle.trim(),
+          body: homeComponentForm.body.trim(),
+          enabled: true,
+          locked: false,
+          order: current.sections.length,
+        },
+      ],
+    }));
+    setHomeComponentForm({ ...initialHomeComponentForm });
+    setNotice('Componente anadido a la portada.');
+  };
+
+  const resetHomeContent = () => {
+    saveHomeContent(homeContentModel.getDefault());
+    setHomeComponentForm({ ...initialHomeComponentForm });
+    setNotice('Portada restablecida.');
+  };
+
   const updateAdminUserForm = (field, value) => {
     setAdminUserForm((current) => ({ ...current, [field]: value }));
   };
@@ -1032,6 +1151,8 @@ export function useShopController() {
       filters,
       favoriteIds,
       featuredProducts,
+      homeComponentForm,
+      homeContent,
       imageForm,
       loadingProductDetail,
       loadingProducts,
@@ -1102,12 +1223,21 @@ export function useShopController() {
       updateAccountReviewForm,
       updateCartItem,
       updateCategoryForm,
+      updateHomeComponentForm,
+      updateHomeHero,
+      updateHomeSection,
       updateImageForm,
       updatePaymentForm,
       updateProductForm,
       updateReviewForm,
       updateShippingForm,
       toggleFavorite,
+      toggleFeaturedProduct,
+      toggleHomeSection,
+      moveHomeSection,
+      deleteHomeSection,
+      createHomeComponent,
+      resetHomeContent,
       saveImageUrl,
       submitProductReview,
       uploadProductImages,
