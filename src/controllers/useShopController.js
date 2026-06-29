@@ -157,17 +157,6 @@ const routeByView = {
   admin: '/gestion',
 };
 
-function parseRoute(pathname = window.location.pathname) {
-  const path = pathname.replace(/\/+$/, '') || '/';
-  const productMatch = path.match(/^\/producto\/([^/]+)$/);
-  if (productMatch) {
-    return { view: 'product', productId: decodeURIComponent(productMatch[1]) };
-  }
-
-  const view = Object.entries(routeByView).find(([, route]) => route === path)?.[0] || 'home';
-  return { view, productId: '' };
-}
-
 function buildRoute(view, productId = '') {
   if (view === 'product' && productId) return '/producto/' + encodeURIComponent(productId);
   return routeByView[view] || routeByView.home;
@@ -180,8 +169,7 @@ const hasClientSideFilters = (filters) => Boolean(
   filters.categoryGroupIds?.length,
 );
 
-export function useShopController() {
-  const initialRoute = parseRoute();
+export function useShopController({ navigate, routePath = '/', routeProductId = '', routeView = 'home' } = {}) {
   const [session, setSession] = useState(() => sessionModel.get());
   const [products, setProducts] = useState([]);
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -200,8 +188,6 @@ export function useShopController() {
   const [favoriteIds, setFavoriteIds] = useState(() => favoritesModel.getAll());
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
-  const [view, setViewState] = useState(initialRoute.view);
-  const [routeProductId, setRouteProductId] = useState(initialRoute.productId);
   const [busy, setBusy] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [notice, setNotice] = useState('');
@@ -279,19 +265,10 @@ export function useShopController() {
   const setView = (nextView, options = {}) => {
     const productId = options.productId || '';
     const nextPath = buildRoute(nextView, productId);
-    const currentPath = window.location.pathname || '/';
-    const shouldReplace = options.replace || false;
 
-    if (currentPath !== nextPath) {
-      window.history[shouldReplace ? 'replaceState' : 'pushState'](
-        { view: nextView, productId },
-        '',
-        nextPath,
-      );
+    if (navigate && routePath !== nextPath) {
+      navigate(nextPath, { replace: Boolean(options.replace) });
     }
-
-    setViewState(nextView);
-    setRouteProductId(nextView === 'product' ? productId : '');
   };
 
   useEffect(() => {
@@ -301,24 +278,11 @@ export function useShopController() {
   }, []);
 
   useEffect(() => {
-    const handlePopState = () => {
-      const nextRoute = parseRoute();
-      setViewState(nextRoute.view);
-      setRouteProductId(nextRoute.productId);
-      if (nextRoute.view !== 'product') {
-        setSelectedProduct(null);
-        setProductReviews([]);
-      }
-    };
-
-    window.history.replaceState(
-      { view, productId: routeProductId },
-      '',
-      buildRoute(view, routeProductId),
-    );
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+    if (routeView !== 'product') {
+      setSelectedProduct(null);
+      setProductReviews([]);
+    }
+  }, [routeView]);
 
   async function loadHomeContent() {
     try {
@@ -333,10 +297,10 @@ export function useShopController() {
   }, [page, filters, favoriteIds]);
 
   useEffect(() => {
-    if (view === 'product' && routeProductId) {
+    if (routeView === 'product' && routeProductId) {
       loadProductFromRoute(routeProductId);
     }
-  }, [view, routeProductId]);
+  }, [routeView, routeProductId]);
 
   useEffect(() => {
     if (session) {
@@ -1457,7 +1421,7 @@ export function useShopController() {
       selectedAccountReviewId,
       session,
       shippingForm,
-      view,
+      view: routeView,
     },
     actions: {
       addToCart,

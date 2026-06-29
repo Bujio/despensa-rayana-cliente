@@ -1,3 +1,4 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { AccountView } from './AccountView.jsx';
 import { AdminView } from './AdminView.jsx';
 import { CanvasBackdrop } from './CanvasBackdrop.jsx';
@@ -34,14 +35,17 @@ export function AppView({ state, actions }) {
       <Notice message={state.notice} onClose={() => actions.setNotice('')} />
 
       <main>
-        {state.view === 'home' && <HomeView state={state} actions={actions} />}
-        {state.view === 'catalog' && <CatalogView state={state} actions={actions} />}
-        {state.view === 'cart' && <CartView state={state} actions={actions} />}
-        {state.view === 'product' && <ProductView state={state} actions={actions} />}
-        {state.view === 'story' && <StoryView actions={actions} />}
-        {state.view === 'orders' && <OrdersView state={state} actions={actions} />}
-        {state.view === 'account' && <AccountView state={state} actions={actions} />}
-        {state.view === 'admin' && <AdminView state={state} actions={actions} />}
+        <Routes>
+          <Route path="/" element={<HomeView state={state} actions={actions} />} />
+          <Route path="/catalogo" element={<CatalogView state={state} actions={actions} />} />
+          <Route path="/cesta" element={<CartView state={state} actions={actions} />} />
+          <Route path="/producto/:productId" element={<ProductView state={state} actions={actions} />} />
+          <Route path="/la-rayana" element={<StoryView actions={actions} />} />
+          <Route path="/pedidos" element={<OrdersView state={state} actions={actions} />} />
+          <Route path="/cuenta" element={<AccountView state={state} actions={actions} />} />
+          <Route path="/gestion" element={<AdminView state={state} actions={actions} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
     </>
