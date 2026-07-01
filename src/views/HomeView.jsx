@@ -17,7 +17,7 @@ import { productModel } from '../models/productModel.js';
 import { categoryVisualModel } from '../models/categoryVisualModel.js';
 
 const categoryIcons = [Leaf, BadgeCheck, HandHeart, Gift];
-const defaultHeroImage = '/despensa-rayana-hero.png';
+const defaultHeroImage = '/camino-extremadura.png';
 
 function getProductId(product) {
   return String(product?._id || product?.id || product?.sku || '');

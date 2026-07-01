@@ -2396,8 +2396,8 @@ main {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(120deg, rgba(24, 56, 39, 0.84), rgba(35, 79, 54, 0.54)),
-    linear-gradient(135deg, #dccba1, #6b8e23);
+    linear-gradient(120deg, rgba(24, 56, 39, 0.88) 0%, rgba(35, 79, 54, 0.68) 44%, rgba(30, 42, 34, 0.24) 100%),
+    url("/despensa-rayana-hero.png") center/cover;
   color: var(--color-white);
   padding: clamp(28px, 6vw, 72px);
   box-shadow: var(--shadow-soft);

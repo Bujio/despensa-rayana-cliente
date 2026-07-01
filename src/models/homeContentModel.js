@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'despensa-rayana-home-content';
-const legacyHeroImages = new Set(['/camino-extremadura.png']);
+const legacyHeroImages = new Set(['/despensa-rayana-hero.png']);
 
 const defaultCategoryItems = [
   {
@@ -53,7 +53,7 @@ export const defaultHomeContent = {
     description: 'Productos de origen extremeno de la zona de La Raya, donde Extremadura se encuentra con Portugal.',
     primaryLabel: 'Descubre productos',
     secondaryLabel: 'Nuestra historia',
-    imageUrl: '/despensa-rayana-hero.png',
+    imageUrl: '/camino-extremadura.png',
   },
   featuredProductIds: [],
   sections: [
