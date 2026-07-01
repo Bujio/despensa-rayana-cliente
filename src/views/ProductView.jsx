@@ -1,22 +1,18 @@
 import { ArrowLeft, BadgeCheck, Heart, MessageSquare, Minus, PackageSearch, Plus, ShieldCheck, ShoppingCart, Star, Truck } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { useEffect, useMemo, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { reviewModel } from '../models/reviewModel.js';
 import { formatCurrency } from './viewFormatters.js';
 
-const allowedDescriptionTags = new Set(['h2', 'h3', 'p', 'strong', 'b', 'u', 'em', 'ul', 'ol', 'li', 'br']);
-
 function sanitizeRichDescription(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
-  const withoutScripts = raw.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '');
-  const safe = withoutScripts.replace(/<\s*(\/?)\s*([a-z0-9]+)(?:\s[^>]*)?>/gi, (match, slash, tagName) => {
-    const tag = String(tagName || '').toLowerCase();
-    if (!allowedDescriptionTags.has(tag)) return '';
-    const normalizedTag = tag === 'b' ? 'strong' : tag;
-    return `<${slash ? '/' : ''}${normalizedTag}>`;
+  const withBreaks = raw.replace(/\n{2,}/g, '\n').replace(/\n/g, '<br>');
+  return DOMPurify.sanitize(withBreaks, {
+    ALLOWED_TAGS: ['h2', 'h3', 'p', 'strong', 'b', 'u', 'em', 'ul', 'ol', 'li', 'br'],
+    ALLOWED_ATTR: [],
   });
-  return safe.replace(/\n{2,}/g, '\n').replace(/\n/g, '<br>');
 }
 
 function ProductDescription({ content }) {

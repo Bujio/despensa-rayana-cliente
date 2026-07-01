@@ -1,3 +1,5 @@
+import { apiRequest } from './apiClient.js';
+
 export const emptyReviewForm = {
   rating: 5,
   title: '',
@@ -10,12 +12,7 @@ function getList(payload) {
 
 export const reviewModel = {
   listProduct(productId) {
-    return fetch(`${import.meta.env?.VITE_API_URL || 'http://localhost:3000/api'}/reviews/product/${productId}`)
-      .then(async (response) => {
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload?.message || 'No se pudieron cargar las opiniones');
-        return getList(payload);
-      });
+    return apiRequest('/reviews/product/' + productId, {}, null).then(getList);
   },
   listMine(request) {
     return request('/reviews/me');
