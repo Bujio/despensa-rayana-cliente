@@ -3,17 +3,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  ShoppingBag,
   SlidersHorizontal,
 } from 'lucide-react';
 import { ProductCard } from './ProductCard.jsx';
-import { formatCurrency } from './viewFormatters.js';
 
 export function CatalogView({ state, actions }) {
   const {
     busy,
-    cartCount,
-    cartTotal,
     categories,
     favoriteIds,
     filters,
@@ -97,11 +93,6 @@ export function CatalogView({ state, actions }) {
             <h1>Compra local para tu despensa</h1>
             <p>Productos de origen extremeño, seleccionados con mirada rayana y listos para llenar tu cocina de territorio.</p>
           </div>
-          <button className="cart-summary" type="button" onClick={() => actions.setView('cart')}>
-            <ShoppingBag size={20} />
-            <span>{cartCount} productos</span>
-            <strong>{formatCurrency(cartTotal)}</strong>
-          </button>
         </div>
 
         {loadingProducts ? (

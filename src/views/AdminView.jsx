@@ -65,6 +65,10 @@ function getRoleLabel(role) {
 
 function getHomeSectionTypeLabel(type) {
   const labels = {
+    hero: 'Hero principal',
+    trust: 'Mensajes de confianza',
+    categories: 'Categorías visuales',
+    featured: 'Productos destacados',
     custom: 'Bloque editorial',
     productCarousel: 'Carrusel de productos',
     promoBanner: 'Banner promocional',
@@ -466,6 +470,26 @@ export function AdminView({ state, actions }) {
                     })}
                   </div>
                   </>
+                )}
+
+                {selectedHomeSection.type === 'trust' && (
+                  <div className="category-piece-editor">
+                    {(selectedHomeSection.items || []).map((item, itemIndex) => (
+                      <div className="custom-component-editor" key={selectedHomeSection.id + itemIndex}>
+                        <strong>Mensaje {itemIndex + 1}</strong>
+                        <label>Icono
+                          <select value={item.icon || 'shield-check'} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'icon', event.target.value)}>
+                            <option value="map-pin">Origen / ubicación</option>
+                            <option value="hand-heart">Artesanía</option>
+                            <option value="shield-check">Calidad</option>
+                            <option value="truck">Envío</option>
+                          </select>
+                        </label>
+                        <label>Título<input value={item.title || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'title', event.target.value)} /></label>
+                        <label>Texto<input value={item.body || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'body', event.target.value)} /></label>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {selectedHomeSection.type === 'categories' && (

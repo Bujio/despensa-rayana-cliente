@@ -17,6 +17,12 @@ import { productModel } from '../models/productModel.js';
 import { categoryVisualModel } from '../models/categoryVisualModel.js';
 
 const categoryIcons = [Leaf, BadgeCheck, HandHeart, Gift];
+const trustIcons = {
+  'map-pin': MapPin,
+  'hand-heart': HandHeart,
+  'shield-check': ShieldCheck,
+  truck: Truck,
+};
 const defaultHeroImage = '/camino-extremadura.png';
 
 function getProductId(product) {
@@ -177,14 +183,30 @@ export function HomeView({ state, actions }) {
       </div>
   );
 
-  const renderTrust = () => (
+  const renderTrust = (section) => {
+    const fallbackItems = [
+      { icon: 'map-pin', title: 'Origen local', body: 'Productos de la zona rayana' },
+      { icon: 'hand-heart', title: 'Artesanía y tradición', body: 'Elaborados como siempre se hizo' },
+      { icon: 'shield-check', title: 'Calidad garantizada', body: 'Seleccionamos lo mejor de nuestra tierra' },
+      { icon: 'truck', title: 'Envío rápido', body: 'En 24/48h en toda la península' },
+    ];
+    const trustItems = Array.isArray(section?.items) && section.items.length ? section.items : fallbackItems;
+
+    return (
       <section className="home-band trust-band" aria-label="Confianza">
-        <article><MapPin size={20} /><strong>Origen local</strong><span>Productos de la zona rayana</span></article>
-        <article><HandHeart size={20} /><strong>Artesanía y tradición</strong><span>Elaborados como siempre se hizo</span></article>
-        <article><ShieldCheck size={20} /><strong>Calidad garantizada</strong><span>Seleccionamos lo mejor de nuestra tierra</span></article>
-        <article><Truck size={20} /><strong>Envío rápido</strong><span>En 24/48h en toda la península</span></article>
+        {trustItems.map((item, index) => {
+          const Icon = trustIcons[item.icon] || trustIcons[fallbackItems[index]?.icon] || ShieldCheck;
+          return (
+            <article key={(item.title || 'confianza') + index}>
+              <Icon size={20} />
+              <strong>{item.title || fallbackItems[index]?.title || 'Mensaje de confianza'}</strong>
+              <span>{item.body || fallbackItems[index]?.body || 'Información de confianza'}</span>
+            </article>
+          );
+        })}
       </section>
-  );
+    );
+  };
 
   const openCategoryTile = (category) => {
     const linkUrl = category.linkUrl || category.name;
@@ -360,7 +382,7 @@ export function HomeView({ state, actions }) {
 
   const renderSection = (section) => {
     if (section.type === 'hero') return renderHero();
-    if (section.type === 'trust') return renderTrust();
+    if (section.type === 'trust') return renderTrust(section);
     if (section.type === 'categories') return renderCategories(section);
     if (section.type === 'featured') return renderFeatured();
     if (section.type === 'productCarousel') return (

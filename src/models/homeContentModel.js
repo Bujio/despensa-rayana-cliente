@@ -46,6 +46,29 @@ const defaultCategoryItems = [
   },
 ];
 
+const defaultTrustItems = [
+  {
+    icon: 'map-pin',
+    title: 'Origen local',
+    body: 'Productos de la zona rayana',
+  },
+  {
+    icon: 'hand-heart',
+    title: 'Artesanía y tradición',
+    body: 'Elaborados como siempre se hizo',
+  },
+  {
+    icon: 'shield-check',
+    title: 'Calidad garantizada',
+    body: 'Seleccionamos lo mejor de nuestra tierra',
+  },
+  {
+    icon: 'truck',
+    title: 'Envío rápido',
+    body: 'En 24/48h en toda la península',
+  },
+];
+
 export const defaultHomeContent = {
   hero: {
     eyebrow: 'Origen extremeno - Espiritu rayano',
@@ -58,7 +81,7 @@ export const defaultHomeContent = {
   featuredProductIds: [],
   sections: [
     { id: 'hero', type: 'hero', title: 'Hero principal', enabled: true, locked: true },
-    { id: 'trust', type: 'trust', title: 'Mensajes de confianza', enabled: true, locked: true },
+    { id: 'trust', type: 'trust', title: 'Mensajes de confianza', enabled: true, locked: true, items: defaultTrustItems },
     { id: 'categories', type: 'categories', title: 'Explora nuestras categorías', enabled: true, locked: true, items: defaultCategoryItems },
     { id: 'featured', type: 'featured', title: 'Productos destacados', enabled: true, locked: true },
   ],
@@ -70,9 +93,9 @@ function clone(value) {
 
 function normalizeSection(section, index) {
   const sectionItems = Array.isArray(section.items) ? section.items : [];
-  const items = section.type === 'categories' && sectionItems.length === 0
-    ? clone(defaultCategoryItems)
-    : sectionItems;
+  let items = sectionItems;
+  if (section.type === 'categories' && sectionItems.length === 0) items = clone(defaultCategoryItems);
+  if (section.type === 'trust' && sectionItems.length === 0) items = clone(defaultTrustItems);
   return {
     body: '',
     ctaLabel: '',
