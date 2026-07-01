@@ -157,8 +157,9 @@ const routeByView = {
   admin: '/gestion',
 };
 
-function buildRoute(view, productId = '') {
+function buildRoute(view, { categorySlug = '', productId = '' } = {}) {
   if (view === 'product' && productId) return '/producto/' + encodeURIComponent(productId);
+  if (view === 'catalog' && categorySlug) return '/catalogo/' + encodeURIComponent(categorySlug);
   return routeByView[view] || routeByView.home;
 }
 
@@ -213,7 +214,7 @@ const hasClientSideFilters = (filters) => Boolean(
   filters.categoryGroupIds?.length,
 );
 
-export function useShopController({ navigate, routePath = '/', routeProductId = '', routeView = 'home' } = {}) {
+export function useShopController({ navigate, routeCategorySlug = '', routePath = '/', routeProductId = '', routeView = 'home' } = {}) {
   const [session, setSession] = useState(() => sessionModel.get());
   const [products, setProducts] = useState([]);
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -307,8 +308,10 @@ export function useShopController({ navigate, routePath = '/', routeProductId = 
   const request = (path, options) => apiRequest(path, options, session, applySession);
 
   const setView = (nextView, options = {}) => {
-    const productId = options.productId || '';
-    const nextPath = buildRoute(nextView, productId);
+    const nextPath = buildRoute(nextView, {
+      categorySlug: options.categorySlug || '',
+      productId: options.productId || '',
+    });
 
     if (navigate && routePath !== nextPath) {
       navigate(nextPath, { replace: Boolean(options.replace) });
@@ -820,19 +823,7 @@ export function useShopController({ navigate, routePath = '/', routeProductId = 
     setView('catalog');
   };
 
-  const openCommerceCategory = (label) => {
-    if (label === 'La Rayana') {
-      setView('story');
-      return;
-    }
-
-    if (label === 'Ofertas') {
-      setPage(1);
-      setFilters({ ...emptyFilters, onlyOffers: true, inStock: true });
-      setView('catalog');
-      return;
-    }
-
+  const applyCommerceCategoryFilters = (label) => {
     const visual = categoryVisualModel.findVisual(label);
     const matchedCategories = visual
       ? categories.filter((item) => categoryVisualModel.matches(item, visual))
@@ -850,8 +841,47 @@ export function useShopController({ navigate, routePath = '/', routeProductId = 
     } else {
       setFilters({ ...emptyFilters, search: label, inStock: true });
     }
-    setView('catalog');
   };
+
+  const openCommerceCategory = (label) => {
+    if (label === 'La Rayana') {
+      setView('story');
+      return;
+    }
+
+    if (label === 'Ofertas') {
+      setPage(1);
+      setFilters({ ...emptyFilters, onlyOffers: true, inStock: true });
+      setView('catalog', { categorySlug: 'ofertas' });
+      return;
+    }
+
+    applyCommerceCategoryFilters(label);
+    setView('catalog', { categorySlug: categoryVisualModel.slugify(label) });
+  };
+
+  useEffect(() => {
+    if (routeView !== 'catalog') return;
+
+    if (!routeCategorySlug) {
+      setPage(1);
+      setFilters((current) => (
+        current.categoryId || current.categoryGroupIds?.length || current.onlyOffers
+          ? { ...emptyFilters, inStock: true }
+          : current
+      ));
+      return;
+    }
+
+    const visual = categoryVisualModel.findBySlug(routeCategorySlug);
+    if (visual?.label === 'Ofertas' || routeCategorySlug === 'ofertas') {
+      setPage(1);
+      setFilters({ ...emptyFilters, onlyOffers: true, inStock: true });
+      return;
+    }
+
+    applyCommerceCategoryFilters(visual?.label || routeCategorySlug.replace(/-/g, ' '));
+  }, [routeView, routeCategorySlug, categories.length]);
 
   const toggleFavorite = (product) => {
     const productId = getProductId(product);

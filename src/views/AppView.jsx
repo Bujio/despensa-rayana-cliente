@@ -38,6 +38,7 @@ export function AppView({ state, actions }) {
         <Routes>
           <Route path="/" element={<HomeView state={state} actions={actions} />} />
           <Route path="/catalogo" element={<CatalogView state={state} actions={actions} />} />
+          <Route path="/catalogo/:categorySlug" element={<CatalogView state={state} actions={actions} />} />
           <Route path="/cesta" element={<CartView state={state} actions={actions} />} />
           <Route path="/producto/:productId" element={<ProductView state={state} actions={actions} />} />
           <Route path="/la-rayana" element={<StoryView actions={actions} />} />

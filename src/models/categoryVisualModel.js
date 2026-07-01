@@ -57,11 +57,23 @@ function normalize(value = '') {
     .trim();
 }
 
+function slugify(value = '') {
+  return normalize(value).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 export const categoryVisualModel = {
   list() {
     return categoryVisuals;
   },
   normalize,
+  slugify,
+  findBySlug(slug) {
+    const normalizedSlug = slugify(slug);
+    return categoryVisuals.find((visual) => (
+      slugify(visual.label) === normalizedSlug ||
+      visual.aliases.some((alias) => slugify(alias) === normalizedSlug)
+    ));
+  },
   findVisual(label) {
     const normalized = normalize(label);
     return categoryVisuals.find((visual) => (
