@@ -157,6 +157,27 @@ const routeByView = {
   admin: '/gestion',
 };
 
+const adminRouteByTab = {
+  dashboard: '/admin',
+  homepage: '/admin/home',
+  products: '/admin/products',
+  categories: '/admin/categories',
+  orders: '/admin/orders',
+  users: '/admin/users',
+  suppliers: '/admin/suppliers',
+  offers: '/admin/offers',
+  content: '/admin/content',
+  messages: '/admin/messages',
+  reports: '/admin/reports',
+  settings: '/admin/settings',
+  reviews: '/admin/reviews',
+  media: '/admin/media',
+};
+
+const adminTabByRoute = Object.fromEntries(
+  Object.entries(adminRouteByTab).map(([tab, path]) => [path, tab]),
+);
+
 function buildRoute(view, { categorySlug = '', productId = '' } = {}) {
   if (view === 'product' && productId) return '/producto/' + encodeURIComponent(productId);
   if (view === 'catalog' && categorySlug) return '/catalogo/' + encodeURIComponent(categorySlug);
@@ -238,7 +259,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [notice, setNotice] = useState('');
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState(() => ({ ...initialAuthForm }));
-  const [adminTab, setAdminTab] = useState('users');
+  const [adminTab, setAdminTab] = useState('dashboard');
   const [adminSearch, setAdminSearchState] = useState(() => ({ ...initialAdminSearch }));
   const [adminProducts, setAdminProducts] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
@@ -318,11 +339,24 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   };
 
+  function openAdminTab(nextTab) {
+    setAdminTab(nextTab);
+    const nextPath = adminRouteByTab[nextTab] || '/admin';
+    if (navigate && routePath !== nextPath) {
+      navigate(nextPath, { replace: false });
+    }
+  }
+
   useEffect(() => {
     loadCategories();
     loadFeaturedProducts();
     loadHomeContent();
   }, []);
+
+  useEffect(() => {
+    if (routeView !== 'admin') return;
+    setAdminTab(adminTabByRoute[routePath] || (routePath === '/gestion' ? 'dashboard' : 'dashboard'));
+  }, [routeView, routePath]);
 
   useEffect(() => {
     if (routeView !== 'product') {
@@ -375,7 +409,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setSelectedAdminOrderId('');
       setSelectedAdminProductId('');
       setSelectedAdminCategoryId('');
-      setAdminTab('users');
+      setAdminTab('dashboard');
       setAdminSearchState({ ...initialAdminSearch });
       setCheckoutStep('items');
       setShippingForm(getShippingDefaults(null));
@@ -1512,6 +1546,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       handleLogout,
       openProduct,
       openAdminOrder,
+      openAdminTab,
       openAdminUserOrders,
       removeCartItem,
       resetFilters,

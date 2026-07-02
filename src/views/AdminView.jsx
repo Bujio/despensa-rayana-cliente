@@ -1,26 +1,36 @@
 import {
+  BarChart3,
+  Bell,
   Bold,
   ChevronLeft,
   ChevronRight,
   Eye,
+  FileText,
   Heading2,
   Heading3,
+  HelpCircle,
+  Home,
   ImageUp,
   LayoutDashboard,
   Link,
   List,
   MessageSquare,
+  Megaphone,
   MoveDown,
   MoveUp,
   PackagePlus,
+  PanelLeft,
   Percent,
   Plus,
   RotateCcw,
   Save,
   Search,
+  Settings,
+  Store,
   ShoppingBag,
   Tags,
   Trash2,
+  Truck,
   Type,
   Underline,
   UserCog,
@@ -63,6 +73,41 @@ function getRoleLabel(role) {
   return role === 'admin' ? 'Admin' : 'Cliente';
 }
 
+function getProductStatus(product) {
+  if (!productModel.getImage(product)) return ['Sin imagen', 'warning'];
+  if (Number(product.stock || 0) === 0) return ['Agotado', 'danger'];
+  if (Number(product.stock || 0) <= 5) return ['Bajo stock', 'warning'];
+  if (productModel.getOfferLabel(product)) return ['Oferta', 'success'];
+  return ['Publicado', 'success'];
+}
+
+function AdminBadge({ tone = 'neutral', children }) {
+  return <span className={'admin-badge ' + tone}>{children}</span>;
+}
+
+function AdminStatCard({ icon: Icon, label, value, detail, tone = 'primary' }) {
+  return (
+    <article className={'admin-stat-card ' + tone}>
+      <span><Icon size={20} /></span>
+      <div>
+        <strong>{value}</strong>
+        <p>{label}</p>
+        {detail && <small>{detail}</small>}
+      </div>
+    </article>
+  );
+}
+
+function AdminPlaceholderSection({ icon: Icon, title, description, children }) {
+  return (
+    <section className="admin-panel admin-placeholder-panel">
+      <div className="admin-panel-title"><Icon size={19} /> {title}</div>
+      <p>{description}</p>
+      {children}
+    </section>
+  );
+}
+
 function getHomeSectionTypeLabel(type) {
   const labels = {
     hero: 'Hero principal',
@@ -100,25 +145,41 @@ function OrderDetail({ order }) {
   );
 }
 
-function AdminTabs({ active, actions }) {
-  const tabs = [
-    ['homepage', LayoutDashboard, 'Portada'],
-    ['users', Users, 'Clientes'],
-    ['products', PackagePlus, 'Productos'],
-    ['categories', Tags, 'Categorías'],
-    ['orders', ShoppingBag, 'Pedidos'],
-    ['reviews', MessageSquare, 'Opiniones'],
-    ['media', ImageUp, 'Imágenes'],
-  ];
+const adminNavigation = [
+  ['dashboard', LayoutDashboard, 'Dashboard'],
+  ['homepage', Home, 'Portada'],
+  ['products', PackagePlus, 'Productos'],
+  ['categories', Tags, 'Categorías'],
+  ['orders', ShoppingBag, 'Pedidos'],
+  ['users', Users, 'Clientes'],
+  ['suppliers', Store, 'Proveedores'],
+  ['offers', Percent, 'Ofertas'],
+  ['content', FileText, 'Contenido'],
+  ['messages', MessageSquare, 'Mensajes'],
+  ['reports', BarChart3, 'Informes'],
+  ['settings', Settings, 'Configuración'],
+];
 
+function AdminTabs({ active, actions, session }) {
   return (
-    <div className="admin-tabs">
-      {tabs.map(([key, Icon, label]) => (
-        <button className={active === key ? 'active' : ''} type="button" key={key} onClick={() => actions.setAdminTab(key)}>
-          <Icon size={17} /> {label}
-        </button>
-      ))}
-    </div>
+    <aside className="admin-sidebar" aria-label="Navegación de administración">
+      <div className="admin-sidebar-brand">
+        <strong>La Despensa Rayana</strong>
+        <span>Backoffice</span>
+      </div>
+      <nav>
+        {adminNavigation.map(([key, Icon, label]) => (
+          <button className={active === key ? 'active' : ''} type="button" key={key} onClick={() => actions.openAdminTab(key)}>
+            <Icon size={18} /> {label}
+          </button>
+        ))}
+      </nav>
+      <div className="admin-sidebar-user">
+        <span>{session?.user?.name || 'Administrador'}</span>
+        <small>{session?.user?.email || 'admin'}</small>
+        <button type="button" onClick={actions.handleLogout}>Cerrar sesión</button>
+      </div>
+    </aside>
   );
 }
 
@@ -262,16 +323,53 @@ export function AdminView({ state, actions }) {
     product.supplier?.name,
   ], adminSearch.media));
 
-  return (
-    <section className="admin-view">
-      <div className="section-heading compact admin-heading">
-        <div>
-          <h1>Backoffice</h1>
-          <p>Gestión por colección con clientes, productos, categorías, pedidos e imágenes.</p>
-        </div>
-      </div>
+  const lowStockProducts = adminProducts.filter((product) => Number(product.stock || 0) > 0 && Number(product.stock || 0) <= 5);
+  const outOfStockProducts = adminProducts.filter((product) => Number(product.stock || 0) === 0);
+  const productsWithoutImage = adminProducts.filter((product) => !productModel.getImage(product));
+  const pendingOrders = orders.filter((order) => ['pending', 'pendiente', 'processing', 'procesando'].includes(String(order.status || 'pending').toLowerCase()));
+  const activeOffers = adminProducts.filter((product) => productModel.getOfferLabel(product));
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayOrders = orders.filter((order) => String(order.createdAt || order.date || '').slice(0, 10) === todayKey);
+  const todaySales = todayOrders.reduce((total, order) => total + orderModel.getTotal(order), 0);
+  const recentOrders = [...orders].sort((first, second) => new Date(second.createdAt || second.date || 0) - new Date(first.createdAt || first.date || 0)).slice(0, 5);
 
-      <AdminTabs active={adminTab} actions={actions} />
+  const adminPageMeta = {
+    dashboard: ['Dashboard', 'Resumen operativo de la tienda.'],
+    homepage: ['Mantenimiento de portada', 'Gestiona los contenidos principales de la home de la tienda.'],
+    products: ['Productos', 'Gestiona el catálogo, stock, precios, ofertas e imágenes.'],
+    categories: ['Categorías', 'Organiza los productos de la tienda.'],
+    orders: ['Pedidos', 'Consulta y actualiza el estado de los pedidos.'],
+    users: ['Clientes', 'Gestiona usuarios, roles y datos de cliente.'],
+    suppliers: ['Proveedores', 'Gestiona productores, artesanos y origen de los productos.'],
+    offers: ['Ofertas', 'Controla promociones activas y descuentos del catálogo.'],
+    content: ['Contenido', 'Gestiona textos y bloques informativos de la tienda.'],
+    messages: ['Mensajes', 'Consulta solicitudes y conversaciones recibidas.'],
+    reports: ['Informes', 'Analiza ventas, pedidos y comportamiento del catálogo.'],
+    settings: ['Configuración', 'Ajustes generales de la tienda.'],
+    reviews: ['Opiniones', 'Modera recomendaciones y valoraciones de clientes.'],
+    media: ['Imágenes', 'Gestiona imágenes asociadas a productos reales.'],
+  };
+  const [pageTitle, pageDescription] = adminPageMeta[adminTab] || adminPageMeta.dashboard;
+
+  return (
+    <section className="admin-view admin-shell">
+      <AdminTabs active={adminTab} actions={actions} session={session} />
+      <main className="admin-main">
+        <header className="admin-topbar">
+          <button className="icon-button" type="button" aria-label="Contraer navegación"><PanelLeft size={18} /></button>
+          <div className="admin-page-title">
+            <h1>{pageTitle}</h1>
+            <p>{pageDescription}</p>
+          </div>
+          <label className="input-wrap admin-global-search">
+            <Search size={17} />
+            <input placeholder="Buscar en el backoffice..." onChange={(event) => actions.setAdminSearch(adminTab === 'dashboard' ? 'products' : adminTab, event.target.value)} />
+            <kbd>Ctrl K</kbd>
+          </label>
+          <button className="icon-button" type="button" title="Notificaciones"><Bell size={18} /></button>
+          <button className="icon-button" type="button" title="Ayuda"><HelpCircle size={18} /></button>
+          <div className="admin-avatar">{(session?.user?.name || session?.user?.email || 'A').slice(0, 1).toUpperCase()}</div>
+        </header>
 
       {adminTab === 'homepage' && (
         <div className="homepage-admin-layout">
@@ -942,6 +1040,68 @@ export function AdminView({ state, actions }) {
         </div>
       )}
 
+
+      {adminTab === 'suppliers' && (
+        <AdminPlaceholderSection icon={Store} title="Proveedores" description="Base preparada para gestionar productores, artesanos y origen local cuando exista endpoint específico.">
+          <div className="admin-table-like">
+            {Array.from(new Map(adminProducts.map((product) => [product.supplier?.id || product.supplier?.name || product.sku, product.supplier])).values()).filter(Boolean).slice(0, 8).map((supplier) => (
+              <article className="collection-row" key={supplier.id || supplier.name}>
+                <button className="user-main" type="button"><strong>{supplier.name || 'Proveedor sin nombre'}</strong><span>ID {supplier.id || 'sin ID'} · Origen asociado al catálogo</span></button>
+                <AdminBadge tone="success">Activo</AdminBadge>
+              </article>
+            ))}
+          </div>
+        </AdminPlaceholderSection>
+      )}
+
+      {adminTab === 'offers' && (
+        <AdminPlaceholderSection icon={Megaphone} title="Ofertas" description="Control operativo de promociones configuradas en productos reales.">
+          <div className="admin-table-like">
+            {activeOffers.length ? activeOffers.map((product) => (
+              <article className="collection-row with-thumb" key={getId(product)}>
+                <div className="admin-thumb">{productModel.getImage(product) ? <img src={productModel.getImage(product)} alt="" /> : <Percent size={20} />}</div>
+                <button className="user-main" type="button" onClick={() => actions.selectAdminProduct(product)}><strong>{product.name}</strong><span>{product.sku} · {productModel.getOfferLabel(product)}</span></button>
+                <AdminBadge tone="success">Activa</AdminBadge>
+              </article>
+            )) : <div className="empty-state compact-empty">No hay ofertas activas.</div>}
+          </div>
+        </AdminPlaceholderSection>
+      )}
+
+      {adminTab === 'content' && (
+        <AdminPlaceholderSection icon={FileText} title="Contenido" description="Área preparada para textos editoriales: Nuestra historia, La Raya, FAQ y bloques informativos.">
+          <div className="admin-empty-actions"><button className="secondary" type="button" onClick={() => actions.openAdminTab('homepage')}>Editar portada</button></div>
+        </AdminPlaceholderSection>
+      )}
+
+      {adminTab === 'messages' && (
+        <AdminPlaceholderSection icon={MessageSquare} title="Mensajes" description="Bandeja preparada para consultas de clientes cuando exista formulario de contacto.">
+          <div className="empty-state compact-empty">No hay mensajes conectados todavía.</div>
+        </AdminPlaceholderSection>
+      )}
+
+      {adminTab === 'reports' && (
+        <AdminPlaceholderSection icon={BarChart3} title="Informes" description="Analítica básica calculada con pedidos y catálogo disponibles.">
+          <div className="admin-report-grid">
+            <AdminStatCard icon={BarChart3} label="Ingresos" value={formatCurrency(orders.reduce((total, order) => total + orderModel.getTotal(order), 0))} />
+            <AdminStatCard icon={ShoppingBag} label="Pedidos" value={orders.length} />
+            <AdminStatCard icon={PackagePlus} label="Productos" value={adminProducts.length} />
+            <AdminStatCard icon={Tags} label="Categorías" value={categories.length} />
+          </div>
+        </AdminPlaceholderSection>
+      )}
+
+      {adminTab === 'settings' && (
+        <AdminPlaceholderSection icon={Settings} title="Configuración" description="Ajustes generales preparados para tienda, envíos, emails, apariencia y seguridad.">
+          <div className="admin-settings-grid">
+            <article><strong>Datos de tienda</strong><span>La Despensa Rayana · contacto y dirección</span></article>
+            <article><strong>Envíos</strong><span>Península 24/48h · costes configurables</span></article>
+            <article><strong>Apariencia</strong><span>Logo, color principal y mensajes de topbar</span></article>
+            <article><strong>Seguridad</strong><span>Usuarios admin y sesiones</span></article>
+          </div>
+        </AdminPlaceholderSection>
+      )}
+
       {adminTab === 'media' && (
         <div className="admin-products-layout">
           <section className="admin-panel media-admin-panel">
@@ -980,6 +1140,7 @@ export function AdminView({ state, actions }) {
           </section>
         </div>
       )}
+      </main>
     </section>
   );
 }

@@ -45,6 +45,8 @@ export function AppView({ state, actions }) {
           <Route path="/pedidos" element={<OrdersView state={state} actions={actions} />} />
           <Route path="/cuenta" element={<AccountView state={state} actions={actions} />} />
           <Route path="/gestion" element={<AdminView state={state} actions={actions} />} />
+          <Route path="/admin" element={<AdminView state={state} actions={actions} />} />
+          <Route path="/admin/:adminSection" element={<AdminView state={state} actions={actions} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
