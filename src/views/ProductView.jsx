@@ -15,10 +15,10 @@ function sanitizeRichDescription(value) {
   });
 }
 
-function ProductDescription({ content }) {
+function RichProductText({ className = 'rich-product-description', content }) {
   const html = sanitizeRichDescription(content);
-  if (!html) return <p>Producto local seleccionado para tu despensa.</p>;
-  return <div className="rich-product-description" dangerouslySetInnerHTML={{ __html: html }} />;
+  if (!html) return null;
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 export function ProductView({ state, actions }) {
@@ -60,8 +60,8 @@ export function ProductView({ state, actions }) {
   const isFavorite = favoriteIds.includes(selectedProductId);
   const reviewSummary = reviewModel.getSummary(productReviews);
   const ownReview = productReviews.find((review) => String(review.user?._id || review.user?.id || review.user) === String(session?.user?.id || session?.user?._id));
-  const shortDescription = selectedProduct.shortDescription || selectedProduct.description || 'Producto local seleccionado para tu despensa.';
-  const longDescription = selectedProduct.description || selectedProduct.shortDescription || '';
+  const shortDescription = selectedProduct.shortDescription || '';
+  const longDescription = selectedProduct.description || '';
 
   const updateQuantity = (nextQuantity) => {
     setQuantity(Math.min(Math.max(nextQuantity, 1), Math.max(availableStock, 1)));
@@ -124,7 +124,7 @@ export function ProductView({ state, actions }) {
             </span>
             <span>({reviewSummary.count} valoraciones)</span>
           </div>
-          <p className="short-product-description">{shortDescription}</p>
+          {shortDescription && <RichProductText className="short-product-description rich-product-description" content={shortDescription} />}
 
           <div className="detail-price">
             {hasPriceOffer && <span className="old-price">{formatCurrency(selectedProduct.price)}</span>}
@@ -174,7 +174,7 @@ export function ProductView({ state, actions }) {
 
         {activeTab === 'description' && (
           <div className="tab-content">
-            <ProductDescription content={longDescription} />
+            <RichProductText content={longDescription} />
             <div className="product-origin-facts">
               <span><BadgeCheck size={18} /> Origen seleccionado</span>
               <span><ShieldCheck size={18} /> Calidad contrastada</span>

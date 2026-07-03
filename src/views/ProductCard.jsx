@@ -3,6 +3,10 @@ import { useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { formatCurrency } from './viewFormatters.js';
 
+function stripRichText(value) {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export function ProductCard({ product, busy, isFavorite = false, reservedBySku = {}, onAdd, onOpen, onToggleFavorite }) {
   const [imageFailed, setImageFailed] = useState(false);
   const image = productModel.getImage(product);
@@ -12,7 +16,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
   const offerPrice = productModel.getOfferPrice(product);
   const hasPriceOffer = offerLabel && offerPrice < Number(product?.price || 0);
   const supplierName = product?.supplier?.name || 'La Despensa Rayana';
-  const cardDescription = product?.shortDescription || product?.description || 'Producto de origen rayano pendiente de completar.';
+  const cardDescription = stripRichText(product?.shortDescription);
 
   const openProduct = (event) => {
     if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
@@ -56,7 +60,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
         <div>
           <p className="product-supplier">{supplierName}</p>
           <h2>{product.name}</h2>
-          <p>{cardDescription}</p>
+          {cardDescription && <p>{cardDescription}</p>}
         </div>
 
         <div className="product-meta">

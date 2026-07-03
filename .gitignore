@@ -1,5 +1,8 @@
 node_modules/
 dist/
+.codex-upload/
+.git-codex-backup/
+CUsersrizzo/
 .env
 .env.*
 !.env.example

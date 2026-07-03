@@ -36,7 +36,7 @@ import {
   UserCog,
   Users,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { formatCurrency } from './viewFormatters.js';
@@ -79,6 +79,10 @@ function getProductStatus(product) {
   if (Number(product.stock || 0) <= 5) return ['Bajo stock', 'warning'];
   if (productModel.getOfferLabel(product)) return ['Oferta', 'success'];
   return ['Publicado', 'success'];
+}
+
+function getSupplierKey(supplier) {
+  return String(supplier?.id ?? supplier?.name ?? '').trim();
 }
 
 function AdminBadge({ tone = 'neutral', children }) {
@@ -189,6 +193,8 @@ export function AdminView({ state, actions }) {
   const [adminProductsPage, setAdminProductsPage] = useState(1);
   const [adminCategoriesPage, setAdminCategoriesPage] = useState(1);
   const [selectedHomeSectionId, setSelectedHomeSectionId] = useState('');
+  const shortDescriptionRef = useRef(null);
+  const longDescriptionRef = useRef(null);
   const {
     adminProducts,
     adminReviews,
@@ -208,6 +214,8 @@ export function AdminView({ state, actions }) {
     selectedAdminOrder,
     selectedAdminOrderId,
     selectedAdminProductId,
+    selectedAdminSupplierKey,
+    supplierForm,
     selectedAdminUser,
     selectedAdminUserId,
     selectedAdminUserOrders,
@@ -268,22 +276,49 @@ export function AdminView({ state, actions }) {
 
   const updateCategory = (field) => (event) => actions.updateCategoryForm(field, event.target.value);
   const updateProduct = (field) => (event) => actions.updateProductForm(field, event.target.value);
-  const insertProductDescriptionBlock = (block) => {
-    const snippets = {
-      title: '<h2>Título de sección</h2>',
-      subtitle: '<h3>Subtítulo</h3>',
-      text: '<p>Texto descriptivo del producto.</p>',
-      bold: '<strong>texto destacado</strong>',
-      underline: '<u>texto subrayado</u>',
-      list: '<ul>\n  <li>Punto destacado</li>\n</ul>',
+  const applyProductRichFormat = (field, block) => {
+    const refs = {
+      shortDescription: shortDescriptionRef,
+      description: longDescriptionRef,
     };
-    const currentDescription = productForm.description || '';
-    const separator = currentDescription.trim() ? '\n' : '';
-    actions.updateProductForm('description', currentDescription + separator + snippets[block]);
+    const textarea = refs[field]?.current;
+    const currentValue = productForm[field] || '';
+    const selectionStart = textarea?.selectionStart ?? currentValue.length;
+    const selectionEnd = textarea?.selectionEnd ?? currentValue.length;
+    const selectedText = currentValue.slice(selectionStart, selectionEnd);
+    const fallbackText = {
+      title: 'Título de sección',
+      subtitle: 'Subtítulo',
+      text: 'Texto descriptivo del producto.',
+      bold: 'texto destacado',
+      underline: 'texto subrayado',
+      list: 'Punto destacado',
+    }[block];
+    const text = selectedText || fallbackText;
+    const wrappers = {
+      title: ['<h2>', '</h2>'],
+      subtitle: ['<h3>', '</h3>'],
+      text: ['<p>', '</p>'],
+      bold: ['<strong>', '</strong>'],
+      underline: ['<u>', '</u>'],
+      list: ['<ul>\n  <li>', '</li>\n</ul>'],
+    };
+    const [prefix, suffix] = wrappers[block];
+    const formatted = prefix + text + suffix;
+    const nextValue = currentValue.slice(0, selectionStart) + formatted + currentValue.slice(selectionEnd);
+    actions.updateProductForm(field, nextValue);
+
+    window.requestAnimationFrame(() => {
+      textarea?.focus();
+      const start = selectionStart + prefix.length;
+      const end = start + text.length;
+      textarea?.setSelectionRange(start, end);
+    });
   };
   const updateImage = (field) => (event) => actions.updateImageForm(field, event.target.value);
   const updateFiles = (event) => actions.updateImageForm('files', Array.from(event.target.files || []));
   const updateUser = (field) => (event) => actions.updateAdminUserForm(field, event.target.value);
+  const updateSupplier = (field) => (event) => actions.updateSupplierForm(field, event.target.value);
   const updateHero = (field) => (event) => actions.updateHomeHero(field, event.target.value);
   const updateComponentForm = (field) => (event) => actions.updateHomeComponentForm(field, event.target.value);
   const uploadHomeImage = (target) => (event) => actions.uploadHomeImage(target, Array.from(event.target.files || []));
@@ -316,6 +351,31 @@ export function AdminView({ state, actions }) {
     review.comment,
     review.rating,
   ], adminSearch.reviews));
+
+  const supplierRecords = Array.from(adminProducts.reduce((records, product) => {
+    const supplier = product.supplier || {};
+    const key = getSupplierKey(supplier);
+    if (!key) return records;
+
+    const current = records.get(key) || {
+      key,
+      id: supplier.id ?? '',
+      name: supplier.name || 'Proveedor sin nombre',
+      products: [],
+    };
+    current.products.push(product);
+    records.set(key, current);
+    return records;
+  }, new Map()).values()).sort((first, second) => first.name.localeCompare(second.name, 'es'));
+
+  const filteredSuppliers = supplierRecords.filter((supplier) => includesSearch([
+    supplier.name,
+    supplier.id,
+    supplier.products.map((product) => product.name).join(' '),
+    supplier.products.map((product) => product.sku).join(' '),
+  ], adminSearch.suppliers));
+
+  const selectedAdminSupplier = supplierRecords.find((supplier) => supplier.key === selectedAdminSupplierKey) || null;
 
   const filteredMediaProducts = adminProducts.filter((product) => includesSearch([
     product.name,
@@ -814,20 +874,33 @@ export function AdminView({ state, actions }) {
               </label>
               <label>ID proveedor<input required type="number" min="0" step="1" value={productForm.supplierId} onChange={updateProduct('supplierId')} /></label>
               <label className="wide-field">Proveedor<input value={productForm.supplierName} onChange={updateProduct('supplierName')} placeholder="Ej. Cooperativa local" /></label>
-              <label className="wide-field">Descripción corta<input value={productForm.shortDescription} onChange={updateProduct('shortDescription')} placeholder="Resumen breve que aparece junto a la valoración y antes del precio" /></label>
+              <div className="wide-field rich-description-editor compact-rich-editor">
+                <div className="rich-editor-header">
+                  <span>Descripción corta</span>
+                  <div className="rich-editor-toolbar" aria-label="Herramientas de formato para descripción corta">
+                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'title')} title="Título"><Heading2 size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'subtitle')} title="Subtítulo"><Heading3 size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'text')} title="Texto"><Type size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'bold')} title="Negrita"><Bold size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'underline')} title="Subrayado"><Underline size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'list')} title="Lista"><List size={16} /></button>
+                  </div>
+                </div>
+                <textarea ref={shortDescriptionRef} value={productForm.shortDescription} onChange={updateProduct('shortDescription')} placeholder="Resumen breve que aparece junto a la valoración y antes del precio. Si se deja vacío, no se mostrará texto corto." />
+              </div>
               <div className="wide-field rich-description-editor">
                 <div className="rich-editor-header">
                   <span>Descripción larga</span>
-                  <div className="rich-editor-toolbar" aria-label="Herramientas de formato">
-                    <button type="button" onClick={() => insertProductDescriptionBlock('title')} title="Título"><Heading2 size={16} /></button>
-                    <button type="button" onClick={() => insertProductDescriptionBlock('subtitle')} title="Subtítulo"><Heading3 size={16} /></button>
-                    <button type="button" onClick={() => insertProductDescriptionBlock('text')} title="Texto"><Type size={16} /></button>
-                    <button type="button" onClick={() => insertProductDescriptionBlock('bold')} title="Negrita"><Bold size={16} /></button>
-                    <button type="button" onClick={() => insertProductDescriptionBlock('underline')} title="Subrayado"><Underline size={16} /></button>
-                    <button type="button" onClick={() => insertProductDescriptionBlock('list')} title="Lista"><List size={16} /></button>
+                  <div className="rich-editor-toolbar" aria-label="Herramientas de formato para descripción larga">
+                    <button type="button" onClick={() => applyProductRichFormat('description', 'title')} title="Título"><Heading2 size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('description', 'subtitle')} title="Subtítulo"><Heading3 size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('description', 'text')} title="Texto"><Type size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('description', 'bold')} title="Negrita"><Bold size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('description', 'underline')} title="Subrayado"><Underline size={16} /></button>
+                    <button type="button" onClick={() => applyProductRichFormat('description', 'list')} title="Lista"><List size={16} /></button>
                   </div>
                 </div>
-                <textarea value={productForm.description} onChange={updateProduct('description')} placeholder="Usa la barra para añadir títulos, subtítulos, texto destacado o listas. Esta descripción aparece en la pestaña Descripción." />
+                <textarea ref={longDescriptionRef} value={productForm.description} onChange={updateProduct('description')} placeholder="Usa la barra para añadir títulos, subtítulos, texto destacado o listas. Esta descripción aparece en la pestaña Descripción." />
               </div>
             </div>
 
@@ -1042,16 +1115,75 @@ export function AdminView({ state, actions }) {
 
 
       {adminTab === 'suppliers' && (
-        <AdminPlaceholderSection icon={Store} title="Proveedores" description="Base preparada para gestionar productores, artesanos y origen local cuando exista endpoint específico.">
-          <div className="admin-table-like">
-            {Array.from(new Map(adminProducts.map((product) => [product.supplier?.id || product.supplier?.name || product.sku, product.supplier])).values()).filter(Boolean).slice(0, 8).map((supplier) => (
-              <article className="collection-row" key={supplier.id || supplier.name}>
-                <button className="user-main" type="button"><strong>{supplier.name || 'Proveedor sin nombre'}</strong><span>ID {supplier.id || 'sin ID'} · Origen asociado al catálogo</span></button>
-                <AdminBadge tone="success">Activo</AdminBadge>
-              </article>
-            ))}
-          </div>
-        </AdminPlaceholderSection>
+        <div className="admin-products-layout supplier-admin-layout">
+          <section className="admin-panel">
+            <div className="admin-panel-title"><Store size={19} /> Proveedores</div>
+            <label className="input-wrap admin-search">
+              <Search size={17} />
+              <input value={adminSearch.suppliers} onChange={(event) => actions.setAdminSearch('suppliers', event.target.value)} placeholder="Buscar proveedor, producto o SKU..." />
+            </label>
+            <div className="admin-list">
+              {filteredSuppliers.length ? filteredSuppliers.map((supplier) => (
+                <article className={'collection-row' + (selectedAdminSupplierKey === supplier.key ? ' active' : '')} key={supplier.key}>
+                  <button className="user-main" type="button" onClick={() => actions.selectAdminSupplier(supplier)}>
+                    <strong>{supplier.name}</strong>
+                    <span>ID {supplier.id || 'sin ID'} · {supplier.products.length} productos asociados</span>
+                  </button>
+                  <AdminBadge tone="success">Activo</AdminBadge>
+                </article>
+              )) : (
+                <div className="empty-state compact-empty">No hay proveedores para mostrar.</div>
+              )}
+            </div>
+          </section>
+
+          <section className="admin-panel supplier-detail-panel">
+            <div className="admin-panel-title"><Store size={19} /> Datos del proveedor</div>
+            {selectedAdminSupplier ? (
+              <form className="admin-form-grid" onSubmit={actions.saveAdminSupplier}>
+                <label>ID proveedor<input type="number" min="0" step="1" value={supplierForm.id} onChange={updateSupplier('id')} /></label>
+                <label className="wide-field">Nombre<input value={supplierForm.name} onChange={updateSupplier('name')} placeholder="Nombre del proveedor" /></label>
+                <div className="wide-field supplier-summary">
+                  <strong>{selectedAdminSupplier.products.length}</strong>
+                  <span>productos asociados a este proveedor</span>
+                </div>
+                <div className="form-actions supplier-form-actions wide-field">
+                  <button className="danger-button destructive-action" type="button" onClick={actions.deleteAdminSupplier} disabled={busy}><Trash2 size={16} /> Eliminar proveedor</button>
+                  <div className="supplier-save-actions">
+                    <button className="secondary" type="button" onClick={actions.resetSupplierForm}>Cancelar</button>
+                    <button className="primary" type="submit" disabled={busy}>Guardar cambios</button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <div className="empty-state compact-empty">Selecciona un proveedor para ver y modificar sus datos.</div>
+            )}
+          </section>
+
+          <section className="admin-panel supplier-products-panel">
+            <div className="admin-panel-title"><ShoppingBag size={19} /> Productos del proveedor</div>
+            {selectedAdminSupplier ? (
+              <div className="admin-list supplier-products-list">
+                {selectedAdminSupplier.products.map((product) => {
+                  const [statusLabel, statusTone] = getProductStatus(product);
+                  const image = productModel.getImage(product);
+                  return (
+                    <article className="collection-row with-thumb" key={getId(product) || product.sku}>
+                      <div className="admin-thumb">{image ? <img src={image} alt="" /> : <ShoppingBag size={18} />}</div>
+                      <button className="user-main" type="button" onClick={() => { actions.openAdminTab('products'); actions.selectAdminProduct(product); }}>
+                        <strong>{product.name}</strong>
+                        <span>{product.sku} · {formatCurrency(product.price)} · Stock {product.stock ?? 0}</span>
+                      </button>
+                      <AdminBadge tone={statusTone}>{statusLabel}</AdminBadge>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="empty-state compact-empty">Los productos aparecerán al seleccionar un proveedor.</div>
+            )}
+          </section>
+        </div>
       )}
 
       {adminTab === 'offers' && (

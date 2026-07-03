@@ -149,6 +149,12 @@ main { padding: 28px clamp(16px, 3vw, 36px) 42px; }
   color: #315c45;
 }
 
+.notice button {
+  flex: 0 0 auto;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
 .catalog-layout {
   display: grid;
   grid-template-columns: 292px minmax(0, 1fr);
@@ -968,6 +974,10 @@ input[type="file"] {
   min-height: 190px;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 14px;
+}
+
+.compact-rich-editor textarea {
+  min-height: 118px;
 }
 
 .form-button {
@@ -2626,6 +2636,7 @@ main {
 }
 
 .short-product-description {
+  display: block;
   color: #4d574d;
   font-size: 17px;
   line-height: 1.6;
@@ -3342,5 +3353,86 @@ main {
 
   .admin-dashboard-card {
     grid-column: 1;
+  }
+}
+
+.supplier-admin-layout {
+  grid-template-columns: minmax(340px, 0.85fr) minmax(460px, 1.15fr);
+}
+
+.supplier-products-panel {
+  grid-column: 1 / -1;
+}
+
+.supplier-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(49, 92, 69, 0.14);
+  border-radius: 10px;
+  background: #f7f3e8;
+  color: #315c45;
+  font-weight: 800;
+}
+
+.supplier-summary strong {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.supplier-products-list .user-main strong {
+  white-space: normal;
+}
+
+.supplier-products-list .collection-row.with-thumb {
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+}
+
+.destructive-action {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(159, 44, 31, 0.22);
+  border-radius: 10px;
+  background: #fff7f5;
+  color: #8f2a1f;
+  padding: 10px 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.destructive-action:hover:not(:disabled) {
+  border-color: rgba(159, 44, 31, 0.38);
+  background: #fee7e2;
+  color: #742016;
+}
+
+.destructive-action svg {
+  flex: 0 0 auto;
+}
+
+.supplier-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 4px;
+}
+
+.supplier-save-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 680px) {
+  .supplier-form-actions,
+  .supplier-save-actions {
+    display: grid;
+    width: 100%;
   }
 }
