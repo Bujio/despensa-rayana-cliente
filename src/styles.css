@@ -3449,3 +3449,107 @@ main {
     width: 100%;
   }
 }
+
+.account-auth-card {
+  align-self: start;
+  margin-top: clamp(28px, 7vh, 72px);
+  min-height: 560px;
+  align-content: start;
+}
+
+.auth-card-top {
+  display: grid;
+  gap: 16px;
+  min-height: 126px;
+  align-content: start;
+}
+
+.auth-heading-block {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-heading-block p {
+  margin: 0;
+  color: #697067;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.account-type-step {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.account-type-card {
+  display: grid;
+  min-height: 178px;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid rgba(49, 92, 69, 0.16);
+  border-radius: 10px;
+  background: #fffefa;
+  color: #1e2a22;
+  padding: 16px;
+  text-align: left;
+}
+
+.account-type-card:hover {
+  border-color: rgba(49, 92, 69, 0.34);
+  background: #eef3ea;
+}
+
+.account-type-card span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  background: #234f39;
+  color: #ffffff;
+}
+
+.account-type-card strong {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.account-type-card small {
+  color: #697067;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.auth-back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+}
+
+.auth-form-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.wide-auth-field textarea {
+  min-height: 108px;
+}
+
+@media (max-width: 680px) {
+  .account-auth-card {
+    margin-top: 18px;
+    min-height: auto;
+  }
+
+  .auth-card-top {
+    min-height: 116px;
+  }
+
+  .account-type-step {
+    grid-template-columns: 1fr;
+  }
+}

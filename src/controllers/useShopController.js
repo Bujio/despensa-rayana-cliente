@@ -13,7 +13,10 @@ import { sessionModel } from '../models/sessionModel.js';
 import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
 
 const initialAuthForm = {
+  accountType: '',
   name: '',
+  legalName: '',
+  description: '',
   email: '',
   password: '',
   phone: '',
@@ -643,7 +646,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         setView(next.user?.role === 'admin' ? 'admin' : 'catalog');
         setNotice('Bienvenido, ' + (next.user?.name || 'cliente'));
       } else {
-        await authModel.register({
+        if (!authForm.accountType) {
+          setNotice('Elige si quieres darte de alta como cliente o proveedor.');
+          return;
+        }
+
+        const payload = {
           name: authForm.name,
           email: authForm.email,
           password: authForm.password,
@@ -654,8 +662,23 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
             codePostal: authForm.codePostal,
             city: authForm.city,
           },
-        });
+        };
+
+        if (authForm.accountType === 'supplier') {
+          const result = await authModel.registerSupplier({
+            ...payload,
+            legalName: authForm.legalName,
+            description: authForm.description,
+          });
+          setAuthMode('login');
+          setAuthForm({ ...initialAuthForm, email: authForm.email });
+          setNotice(result?.message || 'Solicitud de proveedor registrada. Queda pendiente de revisión.');
+          return;
+        }
+
+        await authModel.register(payload);
         setAuthMode('login');
+        setAuthForm({ ...initialAuthForm, email: authForm.email });
         setNotice('Cuenta creada. Revisa el correo para verificarla antes de comprar.');
       }
     } catch (error) {
@@ -999,6 +1022,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   const updateAuthForm = (field, value) => {
     setAuthForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const chooseAccountType = (accountType) => {
+    setAuthForm((current) => ({ ...current, accountType }));
   };
 
   const updateCategoryForm = (field, value) => {
@@ -1697,6 +1724,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     },
     actions: {
       addToCart,
+      chooseAccountType,
       clearCart,
       createCategory,
       createProduct,

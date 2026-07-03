@@ -21,6 +21,16 @@ export const authModel = {
       null,
     );
   },
+  registerSupplier(data) {
+    return apiRequest(
+      '/suppliers/register',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      null,
+    );
+  },
   async logout(refreshToken) {
     if (!refreshToken) return;
     await apiRequest(
