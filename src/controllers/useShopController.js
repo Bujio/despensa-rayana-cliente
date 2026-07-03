@@ -60,6 +60,7 @@ const initialProductForm = {
   supplierName: '',
   supplierImages: [],
   images: [],
+  status: 'pending_review',
   offerType: 'none',
   offerValue: '',
   offerBundleQuantity: '3',
@@ -195,6 +196,7 @@ function getProductFormFromProduct(product, supplierOverride = null) {
     supplierName: supplier.name || '',
     supplierImages: Array.isArray(supplier.images) ? supplier.images : [],
     images: Array.isArray(product?.images) ? product.images : [],
+    status: product?.status || 'pending_review',
     offerType: offer.active ? offer.type || 'none' : 'none',
     offerValue: offer.value ?? '',
     offerBundleQuantity: offer.bundleQuantity || '3',
@@ -214,6 +216,8 @@ const routeByView = {
   account: '/cuenta',
   admin: '/gestion',
   supplier: '/supplier',
+  supplierRegister: '/supplier/register',
+  supplierLogin: '/supplier/login',
 };
 
 const adminRouteByTab = {
@@ -325,6 +329,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [adminSuppliers, setAdminSuppliers] = useState([]);
   const [supplierProfile, setSupplierProfile] = useState(null);
   const [supplierProducts, setSupplierProducts] = useState([]);
+  const [supplierOrders, setSupplierOrders] = useState([]);
+  const [supplierReports, setSupplierReports] = useState({ sales: null, products: null });
   const [selectedSupplierProductId, setSelectedSupplierProductId] = useState('');
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUserForm, setAdminUserForm] = useState(() => ({ ...initialAdminUserForm }));
@@ -477,6 +483,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAdminSuppliers([]);
       setSupplierProfile(null);
       setSupplierProducts([]);
+      setSupplierOrders([]);
+      setSupplierReports({ sales: null, products: null });
       setSelectedSupplierProductId('');
       setAdminUsers([]);
       setAdminUserForm({ ...initialAdminUserForm });
@@ -638,15 +646,51 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   async function loadSupplierPanel() {
     if (session?.user?.role !== 'supplier') return;
     try {
-      const [profile, products] = await Promise.all([
+      const [profile, products, salesReport, productsReport, supplierOrderList] = await Promise.all([
         supplierModel.getProfile(request),
         supplierModel.listProducts(request),
+        supplierModel.getSalesReport(request).catch(() => null),
+        supplierModel.getProductsReport(request).catch(() => null),
+        supplierModel.listOrders(request).catch(() => []),
       ]);
       setSupplierProfile(profile);
       setSupplierProducts(products);
+      setSupplierReports({ sales: salesReport, products: productsReport });
+      setSupplierOrders(supplierOrderList);
     } catch (error) {
       setNotice(error.message);
       setSupplierProducts([]);
+      setSupplierOrders([]);
+    }
+  }
+
+  async function saveSupplierProfile(form) {
+    if (session?.user?.role !== 'supplier') return;
+
+    setBusy(true);
+    try {
+      const profile = await supplierModel.updateProfile(request, form);
+      setSupplierProfile(profile);
+      setNotice('Perfil de proveedor actualizado correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registerSupplierProfile(form) {
+    setBusy(true);
+    setNotice('');
+    try {
+      const result = await supplierModel.register(form);
+      setNotice(result?.message || 'Tu solicitud de proveedor se ha registrado correctamente.');
+      return result;
+    } catch (error) {
+      setNotice(error.message);
+      throw error;
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1142,6 +1186,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   const chooseAccountType = (accountType) => {
     setAuthFeedback(null);
+    if (accountType === 'supplier') {
+      setAuthForm((current) => ({ ...current, accountType }));
+      setView('supplierRegister');
+      return;
+    }
     setAuthForm((current) => ({ ...current, accountType }));
   };
 
@@ -1748,6 +1797,35 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  async function uploadSupplierProductImages(event) {
+    event.preventDefault();
+    const productId = selectedSupplierProductId || imageForm.productId;
+    if (!productId || imageForm.files.length === 0) {
+      setNotice('Elige un producto propio y al menos una imagen.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const updated = await supplierModel.uploadProductImages(request, productId, imageForm.files);
+      setImageForm({ ...initialImageForm, productId });
+      setProductForm((current) => ({
+        ...current,
+        images: Array.isArray(updated?.images) ? updated.images : current.images,
+      }));
+      await loadSupplierPanel();
+      await loadProducts();
+      await loadFeaturedProducts();
+      setNotice('Imágenes subidas correctamente.');
+    } catch (error) {
+      setNotice(error.message === 'Internal server error'
+        ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
+        : error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveImageUrl(event) {
     event.preventDefault();
     const product = adminProducts.find((item) => (item._id || item.id) === imageForm.productId);
@@ -1838,8 +1916,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       selectedAdminSupplierId,
       selectedAdminSupplierKey,
       supplierForm,
+      supplierOrders,
       supplierProducts,
       supplierProfile,
+      supplierReports,
       selectedAdminUser,
       selectedAdminUserId,
       selectedAdminUserOrders,
@@ -1878,6 +1958,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAdminSupplierAction,
       saveAdminUser,
       saveAccountReview,
+      saveSupplierProfile,
       selectAdminCategory,
       selectAdminProduct,
       selectAdminSupplier,
@@ -1924,9 +2005,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       saveHomeContentSettings,
       saveImageUrl,
       saveSupplierProduct,
+      registerSupplierProfile,
       loadSupplierPanel,
       submitProductReview,
       uploadProductImages,
+      uploadSupplierProductImages,
       deleteOrder,
       deleteSupplierProduct,
       deleteAdminSupplier,

@@ -1,6 +1,70 @@
-import { Edit3, Link, PackagePlus, Percent, RefreshCw, Save, ShieldCheck, Store, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import {
+  BarChart3,
+  Edit3,
+  FileText,
+  Home,
+  ImageUp,
+  Link as LinkIcon,
+  LogOut,
+  PackagePlus,
+  Percent,
+  RefreshCw,
+  Save,
+  Settings,
+  ShieldCheck,
+  ShoppingBag,
+  Store,
+  Trash2,
+  UserRound,
+} from 'lucide-react';
 import { productModel } from '../models/productModel.js';
 import { formatCurrency } from './viewFormatters.js';
+
+const emptySupplierRegisterForm = {
+  name: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  legalName: '',
+  slug: '',
+  shortDescription: '',
+  description: '',
+  story: '',
+  specialties: '',
+  origin: '',
+  country: 'España',
+  region: 'Extremadura',
+  province: '',
+  comarca: '',
+  town: '',
+  postalCode: '',
+  address: '',
+  lat: '',
+  lng: '',
+  contactPerson: '',
+  contactEmail: '',
+  phone: '',
+  website: '',
+  instagram: '',
+  facebook: '',
+  taxName: '',
+  taxId: '',
+  invoiceEmail: '',
+  logoUrl: '',
+  logoAlt: '',
+  mainImageUrl: '',
+  mainImageAlt: '',
+  galleryUrls: '',
+  artisan: false,
+  ecological: false,
+  dop: false,
+  igp: false,
+  localProduct: true,
+  familyProduction: false,
+  noIntermediaries: false,
+};
 
 function getSupplierStatusLabel(status) {
   const labels = {
@@ -14,16 +78,16 @@ function getSupplierStatusLabel(status) {
 }
 
 function getSupplierMessage(status) {
-  if (status === 'active') return 'Tu perfil está aprobado. Ya puedes gestionar tus productos y ofertas.';
-  if (status === 'rejected') return 'Tu solicitud como proveedor no ha sido aprobada. Si crees que se trata de un error, contacta con La Despensa Rayana.';
-  if (status === 'inactive') return 'Tu cuenta de proveedor está desactivada temporalmente. No puedes crear ni activar productos.';
-  return 'Tu perfil está pendiente de revisión. Puedes completar tu información y preparar tus productos, pero no serán visibles en la tienda hasta que La Despensa Rayana apruebe tu solicitud.';
+  if (status === 'active') return 'Tu perfil está aprobado. Puedes preparar productos y ofertas; las publicaciones finales siguen pasando por revisión.';
+  if (status === 'rejected') return 'Tu solicitud no ha sido aprobada. Puedes revisar la información y contactar con La Despensa Rayana.';
+  if (status === 'inactive') return 'Tu cuenta de proveedor está inactiva temporalmente. No puedes crear productos nuevos.';
+  return 'Tu perfil está pendiente de revisión. Puedes completar tu información y preparar productos, pero no serán visibles hasta la aprobación.';
 }
 
 function getProductStatusLabel(status) {
   const labels = {
     draft: 'Borrador',
-    pending_review: 'Pendiente de revisión',
+    pending_review: 'Pendiente',
     published: 'Publicado',
     inactive: 'Inactivo',
     rejected: 'Rechazado',
@@ -31,177 +95,604 @@ function getProductStatusLabel(status) {
   return labels[status] || 'Publicado';
 }
 
-export function SupplierView({ state, actions }) {
-  const {
-    busy,
-    categories,
-    imageForm,
-    productForm,
-    selectedSupplierProductId,
-    session,
-    supplierProducts,
-    supplierProfile,
-  } = state;
+function normalizeList(value) {
+  if (Array.isArray(value)) return value.join(', ');
+  return value || '';
+}
 
-  if (session?.user?.role !== 'supplier') {
-    return (
-      <section className="wide-panel single">
-        <div className="empty-state">Necesitas entrar como proveedor para acceder a este panel.</div>
-      </section>
-    );
+function splitList(value) {
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function getSupplierSection(pathname) {
+  if (pathname === '/supplier/register') return 'register';
+  if (pathname === '/supplier/login') return 'login';
+  if (pathname.includes('/profile')) return 'profile';
+  if (pathname.includes('/products/new')) return 'product-new';
+  if (pathname.includes('/products/') && pathname.includes('/edit')) return 'product-edit';
+  if (pathname.includes('/products')) return 'products';
+  if (pathname.includes('/offers')) return 'offers';
+  if (pathname.includes('/reports')) return 'reports';
+  if (pathname.includes('/orders')) return 'orders';
+  if (pathname.includes('/settings')) return 'settings';
+  return 'dashboard';
+}
+
+function buildSupplierPayload(form) {
+  const gallery = splitList(form.galleryUrls).map((url, index) => ({
+    url,
+    name: 'Imagen de proveedor ' + (index + 1),
+    alt: form.name,
+    isMain: index === 0,
+  }));
+
+  return {
+    name: form.legalName || form.name,
+    email: form.email,
+    password: form.password,
+    legalName: form.legalName,
+    slug: form.slug,
+    shortDescription: form.shortDescription,
+    description: form.description,
+    story: form.story,
+    specialties: splitList(form.specialties),
+    origin: form.origin,
+    phone: form.phone,
+    location: {
+      country: form.country,
+      region: form.region,
+      province: form.province,
+      comarca: form.comarca,
+      town: form.town,
+      postalCode: form.postalCode,
+      address: form.address,
+      coordinates: {
+        lat: form.lat ? Number(form.lat) : undefined,
+        lng: form.lng ? Number(form.lng) : undefined,
+      },
+    },
+    contact: {
+      contactPerson: form.contactPerson || form.name,
+      email: form.contactEmail || form.email,
+      phone: form.phone,
+      website: form.website,
+      instagram: form.instagram,
+      facebook: form.facebook,
+    },
+    business: {
+      taxName: form.taxName,
+      taxId: form.taxId,
+      invoiceEmail: form.invoiceEmail || form.email,
+    },
+    logo: form.logoUrl ? { url: form.logoUrl, alt: form.logoAlt || form.name } : undefined,
+    mainImage: form.mainImageUrl ? { url: form.mainImageUrl, alt: form.mainImageAlt || form.name } : undefined,
+    gallery,
+    certifications: {
+      artisan: form.artisan,
+      ecological: form.ecological,
+      dop: form.dop,
+      igp: form.igp,
+      localProduct: form.localProduct,
+      familyProduction: form.familyProduction,
+      noIntermediaries: form.noIntermediaries,
+    },
+  };
+}
+
+function AccessDeniedSupplier({ actions }) {
+  return (
+    <section className="wide-panel single supplier-access-denied">
+      <div className="empty-state">
+        <strong>Acceso reservado a proveedores</strong>
+        <span>Entra con una cuenta de proveedor o solicita el alta para gestionar tus productos.</span>
+      </div>
+      <div className="form-actions">
+        <button type="button" className="secondary" onClick={() => actions.setView('supplierLogin')}>Entrar como proveedor</button>
+        <button type="button" className="primary" onClick={() => actions.setView('supplierRegister')}>Solicitar alta</button>
+      </div>
+    </section>
+  );
+}
+
+function SupplierPublicAuth({ state, actions, mode }) {
+  const isLogin = mode === 'login';
+  return (
+    <section className="supplier-public-auth">
+      <div className="supplier-auth-copy">
+        <span>La Despensa Rayana</span>
+        <h1>{isLogin ? 'Acceso para proveedores' : 'Alta profesional de proveedor'}</h1>
+        <p>Un espacio privado para productores, obradores y artesanos que quieren vender con una identidad cuidada y control sobre su catálogo.</p>
+      </div>
+      {isLogin ? (
+        <form className="account-card supplier-auth-card" onSubmit={actions.handleAuth}>
+          <h2>Entrar</h2>
+          <label>Email<input type="email" value={state.authForm.email} onChange={(event) => actions.updateAuthForm('email', event.target.value)} required /></label>
+          <label>Contraseña<input type="password" value={state.authForm.password} onChange={(event) => actions.updateAuthForm('password', event.target.value)} required /></label>
+          <button className="primary full" type="submit" disabled={state.busy}>Entrar al panel</button>
+          <button className="secondary full" type="button" onClick={() => actions.setView('supplierRegister')}>Solicitar alta como proveedor</button>
+        </form>
+      ) : (
+        <SupplierRegisterWizard actions={actions} busy={state.busy} />
+      )}
+    </section>
+  );
+}
+
+function SupplierRegisterWizard({ actions, busy }) {
+  const [step, setStep] = useState(0);
+  const [form, setForm] = useState(emptySupplierRegisterForm);
+  const [message, setMessage] = useState(null);
+  const update = (field) => (event) => {
+    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+    setMessage(null);
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+  const steps = ['Cuenta', 'Básica', 'Origen', 'Contacto', 'Fiscal', 'Imágenes', 'Certificaciones'];
+
+  async function submit(event) {
+    event.preventDefault();
+    if (step < steps.length - 1) {
+      setStep((current) => current + 1);
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setMessage({ type: 'error', text: 'Las contraseñas no coinciden.' });
+      return;
+    }
+    try {
+      const result = await actions.registerSupplierProfile(buildSupplierPayload(form));
+      setMessage({
+        type: 'success',
+        text: result?.supplier?.supplierCode
+          ? 'Solicitud registrada correctamente. Código proveedor: ' + result.supplier.supplierCode
+          : 'Tu solicitud de proveedor se ha registrado correctamente.',
+      });
+      setForm(emptySupplierRegisterForm);
+      setStep(0);
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message });
+    }
   }
 
-  const status = supplierProfile?.status || 'pending_review';
-  const canManageProducts = !['inactive', 'rejected'].includes(status);
-  const updateProduct = (field) => (event) => actions.updateProductForm(field, event.target.value);
-  const updateImage = (field) => (event) => actions.updateImageForm(field, event.target.value);
-  const getId = (item) => item?._id || item?.id || '';
+  return (
+    <form className="account-card supplier-wizard-card" onSubmit={submit}>
+      <div className="wizard-steps">
+        {steps.map((label, index) => (
+          <button key={label} className={step === index ? 'active' : ''} type="button" onClick={() => setStep(index)}>{index + 1}</button>
+        ))}
+      </div>
+      <h2>{steps[step]}</h2>
+      {step === 0 && (
+        <div className="admin-form-grid">
+          <label>Nombre contacto<input required value={form.name} onChange={update('name')} /></label>
+          <label>Email<input required type="email" value={form.email} onChange={update('email')} /></label>
+          <label>Contraseña<input required type="password" value={form.password} onChange={update('password')} /></label>
+          <label>Confirmar contraseña<input required type="password" value={form.confirmPassword} onChange={update('confirmPassword')} /></label>
+        </div>
+      )}
+      {step === 1 && (
+        <div className="admin-form-grid">
+          <label>Nombre proveedor<input required value={form.legalName} onChange={update('legalName')} /></label>
+          <label>Slug<input value={form.slug} onChange={update('slug')} placeholder="queseria-raya" /></label>
+          <label className="wide-field">Descripción corta<textarea value={form.shortDescription} onChange={update('shortDescription')} /></label>
+          <label className="wide-field">Descripción larga<textarea value={form.description} onChange={update('description')} /></label>
+          <label className="wide-field">Historia<textarea value={form.story} onChange={update('story')} /></label>
+          <label className="wide-field">Especialidades<input value={form.specialties} onChange={update('specialties')} placeholder="quesos, miel, ibéricos" /></label>
+        </div>
+      )}
+      {step === 2 && (
+        <div className="admin-form-grid">
+          <label>País<input value={form.country} onChange={update('country')} /></label>
+          <label>Comunidad autónoma<input value={form.region} onChange={update('region')} /></label>
+          <label>Provincia<input value={form.province} onChange={update('province')} /></label>
+          <label>Comarca<input value={form.comarca} onChange={update('comarca')} /></label>
+          <label>Localidad<input value={form.town} onChange={update('town')} /></label>
+          <label>Código postal<input value={form.postalCode} onChange={update('postalCode')} /></label>
+          <label className="wide-field">Dirección<input value={form.address} onChange={update('address')} /></label>
+          <label>Latitud<input value={form.lat} onChange={update('lat')} /></label>
+          <label>Longitud<input value={form.lng} onChange={update('lng')} /></label>
+        </div>
+      )}
+      {step === 3 && (
+        <div className="admin-form-grid">
+          <label>Persona contacto<input value={form.contactPerson} onChange={update('contactPerson')} /></label>
+          <label>Email contacto<input type="email" value={form.contactEmail} onChange={update('contactEmail')} /></label>
+          <label>Teléfono<input value={form.phone} onChange={update('phone')} /></label>
+          <label>Web<input value={form.website} onChange={update('website')} /></label>
+          <label>Instagram<input value={form.instagram} onChange={update('instagram')} /></label>
+          <label>Facebook<input value={form.facebook} onChange={update('facebook')} /></label>
+        </div>
+      )}
+      {step === 4 && (
+        <div className="admin-form-grid">
+          <label>Razón social<input value={form.taxName} onChange={update('taxName')} /></label>
+          <label>NIF/CIF<input value={form.taxId} onChange={update('taxId')} /></label>
+          <label className="wide-field">Email facturación<input type="email" value={form.invoiceEmail} onChange={update('invoiceEmail')} /></label>
+        </div>
+      )}
+      {step === 5 && (
+        <div className="admin-form-grid">
+          <label className="wide-field">Logo URL<input type="url" value={form.logoUrl} onChange={update('logoUrl')} /></label>
+          <label className="wide-field">Alt logo<input value={form.logoAlt} onChange={update('logoAlt')} /></label>
+          <label className="wide-field">Imagen principal URL<input type="url" value={form.mainImageUrl} onChange={update('mainImageUrl')} /></label>
+          <label className="wide-field">Alt imagen principal<input value={form.mainImageAlt} onChange={update('mainImageAlt')} /></label>
+          <label className="wide-field">Galería URLs separadas por coma<textarea value={form.galleryUrls} onChange={update('galleryUrls')} /></label>
+        </div>
+      )}
+      {step === 6 && (
+        <div className="supplier-cert-grid">
+          {[
+            ['artisan', 'Artesano'],
+            ['ecological', 'Ecológico'],
+            ['dop', 'D.O.P.'],
+            ['igp', 'I.G.P.'],
+            ['localProduct', 'Producto local'],
+            ['familyProduction', 'Producción familiar'],
+            ['noIntermediaries', 'Sin intermediarios'],
+          ].map(([field, label]) => (
+            <label key={field} className="checkbox-field"><input type="checkbox" checked={form[field]} onChange={update(field)} /> {label}</label>
+          ))}
+        </div>
+      )}
+      {message && <p className={'form-message ' + message.type}>{message.text}</p>}
+      <div className="form-actions">
+        {step > 0 && <button className="secondary" type="button" onClick={() => setStep((current) => current - 1)}>Atrás</button>}
+        <button className="primary" type="submit" disabled={busy}>{step === steps.length - 1 ? 'Enviar solicitud' : 'Continuar'}</button>
+      </div>
+    </form>
+  );
+}
+
+function SupplierLayout({ state, actions, children }) {
+  const navigate = useNavigate();
+  const status = state.supplierProfile?.status || 'pending_review';
+  const nav = [
+    ['/supplier', Home, 'Dashboard'],
+    ['/supplier/profile', UserRound, 'Mi perfil'],
+    ['/supplier/products', ShoppingBag, 'Mis productos'],
+    ['/supplier/products/new', PackagePlus, 'Nuevo producto'],
+    ['/supplier/offers', Percent, 'Ofertas'],
+    ['/supplier/reports', BarChart3, 'Informes'],
+    ['/supplier/orders', FileText, 'Pedidos'],
+    ['/supplier/settings', Settings, 'Configuración'],
+  ];
 
   return (
-    <section className="supplier-panel-view">
+    <section className="supplier-shell">
+      <aside className="supplier-sidebar">
+        <div>
+          <strong>{state.supplierProfile?.name || state.session?.user?.name || 'Proveedor'}</strong>
+          <span>{state.supplierProfile?.supplierCode || 'Sin código'}</span>
+          <small>{getSupplierStatusLabel(status)}</small>
+        </div>
+        <nav>
+          {nav.map(([to, Icon, label]) => (
+            <Link key={to} to={to}><Icon size={17} /> {label}</Link>
+          ))}
+        </nav>
+        <button type="button" onClick={actions.handleLogout}><LogOut size={17} /> Cerrar sesión</button>
+      </aside>
+      <div className="supplier-main">
+        <header className="supplier-topbar">
+          <div>
+            <span>Panel proveedor</span>
+            <strong>{state.supplierProfile?.name || state.session?.user?.email}</strong>
+          </div>
+          <div className={'admin-badge ' + (status === 'active' ? 'success' : status === 'rejected' ? 'danger' : 'warning')}>{getSupplierStatusLabel(status)}</div>
+          <button className="secondary" type="button" onClick={() => navigate('/')}>Volver a tienda</button>
+        </header>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function SupplierDashboard({ state, actions }) {
+  const status = state.supplierProfile?.status || 'pending_review';
+  const productReport = state.supplierReports.products || {};
+  const salesReport = state.supplierReports.sales || {};
+  const products = state.supplierProducts || [];
+  const pending = products.filter((product) => product.status === 'pending_review').length;
+  const active = products.filter((product) => product.status === 'published').length;
+  const out = products.filter((product) => Number(product.stock || 0) === 0).length;
+
+  return (
+    <div className="supplier-panel-view">
       <div className="section-heading compact">
         <div>
-          <h1>Gestión de productos</h1>
-          <p>{supplierProfile?.name || session.user?.name || session.user?.email}</p>
+          <h1>Dashboard</h1>
+          <p>Resumen operativo de tu actividad en La Despensa Rayana</p>
         </div>
-        <button className="secondary" type="button" onClick={actions.loadSupplierPanel} disabled={busy}>
-          <RefreshCw size={17} /> Actualizar
-        </button>
+        <button className="secondary" type="button" onClick={actions.loadSupplierPanel} disabled={state.busy}><RefreshCw size={17} /> Actualizar</button>
       </div>
-
       <section className={'supplier-status-banner ' + status}>
         <span><ShieldCheck size={22} /></span>
         <div>
           <strong>{getSupplierStatusLabel(status)}</strong>
           <p>{getSupplierMessage(status)}</p>
-          {supplierProfile?.supplierCode && <small>Código de proveedor: {supplierProfile.supplierCode}</small>}
+          {state.supplierProfile?.supplierCode && <small>Código de proveedor: {state.supplierProfile.supplierCode}</small>}
         </div>
       </section>
-
-      <div className="supplier-products-workspace">
-        <section className="admin-panel supplier-own-products-panel">
-          <div className="admin-panel-title"><PackagePlus size={19} /> Mis productos</div>
-          {supplierProducts.length ? (
-            <div className="admin-list supplier-products-list">
-              {supplierProducts.map((product) => {
-                const image = productModel.getImage(product);
-                const productId = product._id || product.id;
-                return (
-                  <article className={'collection-row with-thumb' + (selectedSupplierProductId === productId ? ' active' : '')} key={productId || product.sku}>
-                    <button className="admin-thumb" type="button" onClick={() => actions.selectSupplierProduct(product)}>
-                      {image ? <img src={image} alt="" /> : <Store size={18} />}
-                    </button>
-                    <button className="user-main supplier-product-summary" type="button" onClick={() => actions.selectSupplierProduct(product)}>
-                      <strong>{product.name}</strong>
-                      <span>{product.sku} · {formatCurrency(product.price)} · Stock {product.stock ?? 0}</span>
-                    </button>
-                    <span className={'admin-badge ' + (product.status === 'published' ? 'success' : product.status === 'rejected' ? 'danger' : 'warning')}>
-                      {getProductStatusLabel(product.status)}
-                    </span>
-                    <div className="supplier-product-actions">
-                      <button className="icon-button" type="button" onClick={() => actions.selectSupplierProduct(product)} disabled={busy} title="Editar producto">
-                        <Edit3 size={16} />
-                      </button>
-                      <button className="icon-button danger-button" type="button" onClick={() => actions.deleteSupplierProduct(product)} disabled={busy || !canManageProducts} title="Eliminar producto">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="empty-state compact-empty">Aún no tienes productos creados.</div>
-          )}
-        </section>
-
-        <form className="admin-panel supplier-product-editor" onSubmit={actions.saveSupplierProduct}>
-          <div className="admin-panel-title">
-            <PackagePlus size={19} /> {selectedSupplierProductId ? 'Editar producto' : 'Nuevo producto'}
-          </div>
-          <div className="admin-form-grid">
-            <label>Nombre<input required value={productForm.name} onChange={updateProduct('name')} disabled={!canManageProducts} placeholder="Ej. Torta del Casar artesana" /></label>
-            <label>SKU<input required value={productForm.sku} onChange={updateProduct('sku')} disabled={!canManageProducts} placeholder="EXT-PRO-001" /></label>
-            <label>Precio<input required type="number" min="0.01" step="0.01" value={productForm.price} onChange={updateProduct('price')} disabled={!canManageProducts} /></label>
-            <label>Stock<input required type="number" min="0" step="1" value={productForm.stock} onChange={updateProduct('stock')} disabled={!canManageProducts} /></label>
-            <label>
-              Categoría
-              <select value={productForm.category} onChange={updateProduct('category')} disabled={!canManageProducts}>
-                <option value="">Sin categoría</option>
-                {categories.map((category) => (
-                  <option key={getId(category)} value={getId(category)}>{category.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>Estado<input readOnly value={selectedSupplierProductId ? 'Pendiente tras guardar cambios' : 'Pendiente de revisión'} /></label>
-            <label className="wide-field">Descripción corta<textarea value={productForm.shortDescription} onChange={updateProduct('shortDescription')} disabled={!canManageProducts} placeholder="Resumen breve para la ficha del producto" /></label>
-            <label className="wide-field">Descripción larga<textarea value={productForm.description} onChange={updateProduct('description')} disabled={!canManageProducts} placeholder="Origen, elaboración, formato, conservación y detalles relevantes" /></label>
-          </div>
-
-          <section className="product-image-editor">
-            <div className="admin-panel-title"><Link size={18} /> Imágenes del producto</div>
-            {productForm.images?.length ? (
-              <div className="product-image-grid">
-                {productForm.images.map((image, index) => (
-                  <article className="product-image-item" key={image.url + index}>
-                    <img src={image.url} alt={image.name || productForm.name || 'Producto'} />
-                    <div>
-                      <strong>{index === 0 ? 'Principal' : image.name || 'Imagen del producto'}</strong>
-                      <span>{image.name || 'Sin nombre'}</span>
-                    </div>
-                    <button className="icon-button danger-button" type="button" onClick={() => actions.removeProductFormImage(index)} disabled={busy || !canManageProducts} title="Eliminar imagen">
-                      <Trash2 size={16} />
-                    </button>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state compact-empty">Añade una imagen real del producto mediante URL.</div>
-            )}
-            <div className="admin-form-grid image-url-editor">
-              <label className="wide-field">URL de imagen<input type="url" value={imageForm.imageUrl} onChange={updateImage('imageUrl')} disabled={!canManageProducts} placeholder="https://..." /></label>
-              <label>Nombre de imagen<input value={imageForm.imageName} onChange={updateImage('imageName')} disabled={!canManageProducts} placeholder="Ej. Vista frontal" /></label>
-              <button className="secondary form-button" type="button" onClick={actions.addProductImageUrl} disabled={busy || !canManageProducts || !imageForm.imageUrl.trim()}>
-                <Link size={17} /> Añadir URL
-              </button>
-            </div>
-          </section>
-
-          <section className="offer-editor">
-            <div className="admin-panel-title"><Percent size={18} /> Oferta</div>
-            <div className="admin-form-grid">
-              <label>
-                Tipo
-                <select value={productForm.offerType} onChange={updateProduct('offerType')} disabled={!canManageProducts}>
-                  <option value="none">Sin oferta</option>
-                  <option value="percent">% descuento</option>
-                  <option value="amount">€ descuento</option>
-                  <option value="bundle">Promoción por unidades</option>
-                </select>
-              </label>
-              {(productForm.offerType === 'percent' || productForm.offerType === 'amount') && (
-                <label>Valor<input type="number" min="0" step="0.01" value={productForm.offerValue} onChange={updateProduct('offerValue')} disabled={!canManageProducts} /></label>
-              )}
-              {productForm.offerType === 'bundle' && (
-                <>
-                  <label>Unidades oferta<input type="number" min="2" step="1" value={productForm.offerBundleQuantity} onChange={updateProduct('offerBundleQuantity')} disabled={!canManageProducts} /></label>
-                  <label>Unidades pagadas<input type="number" min="1" step="1" value={productForm.offerBundlePayQuantity} onChange={updateProduct('offerBundlePayQuantity')} disabled={!canManageProducts} /></label>
-                </>
-              )}
-              <label className="wide-field">Etiqueta<input value={productForm.offerLabel} onChange={updateProduct('offerLabel')} disabled={!canManageProducts} placeholder="Ej. Oferta de temporada" /></label>
-              <label>Vigente desde<input type="date" value={productForm.offerValidFrom} onChange={updateProduct('offerValidFrom')} disabled={!canManageProducts} /></label>
-              <label>Vigente hasta<input type="date" value={productForm.offerValidUntil} onChange={updateProduct('offerValidUntil')} disabled={!canManageProducts} /></label>
-            </div>
-          </section>
-
-          <div className="form-actions supplier-editor-actions">
-            <button className="secondary" type="button" onClick={actions.resetSupplierProductForm} disabled={busy}>Nuevo</button>
-            <button className="primary" type="submit" disabled={busy || !canManageProducts}>
-              <Save size={18} /> {selectedSupplierProductId ? 'Guardar cambios' : 'Crear producto'}
-            </button>
-          </div>
-        </form>
+      <div className="supplier-kpi-grid">
+        <article><span>Mis productos</span><strong>{products.length}</strong></article>
+        <article><span>Activos</span><strong>{productReport.activeProducts ?? active}</strong></article>
+        <article><span>Agotados</span><strong>{productReport.outOfStockProducts ?? out}</strong></article>
+        <article><span>Pendientes</span><strong>{productReport.pendingProducts ?? pending}</strong></article>
+        <article><span>Ventas asociadas</span><strong>{formatCurrency(salesReport.totalRevenueFromOwnProducts || 0)}</strong></article>
+        <article><span>Pedidos propios</span><strong>{salesReport.ordersWithOwnProducts || state.supplierOrders.length}</strong></article>
       </div>
+    </div>
+  );
+}
+
+function SupplierProfile({ state, actions }) {
+  const [form, setForm] = useState(null);
+  const profile = state.supplierProfile;
+  useEffect(() => {
+    if (!profile) return;
+    setForm({
+      name: profile.name || '',
+      legalName: profile.legalName || '',
+      slug: profile.slug || '',
+      shortDescription: profile.shortDescription || '',
+      description: profile.description || '',
+      story: profile.story || '',
+      specialties: normalizeList(profile.specialties),
+      origin: profile.origin || '',
+      location: profile.location || { country: 'España', region: 'Extremadura' },
+      contact: profile.contact || {},
+      business: profile.business || {},
+      logo: profile.logo || {},
+      mainImage: profile.mainImage || {},
+      certifications: profile.certifications || {},
+    });
+  }, [profile]);
+
+  if (!form) return <div className="empty-state compact-empty">Cargando perfil...</div>;
+  const update = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
+  const updateNested = (group, field) => (event) => setForm((current) => ({
+    ...current,
+    [group]: { ...(current[group] || {}), [field]: event.target.type === 'checkbox' ? event.target.checked : event.target.value },
+  }));
+  const submit = (event) => {
+    event.preventDefault();
+    actions.saveSupplierProfile({
+      ...form,
+      specialties: splitList(form.specialties),
+    });
+  };
+
+  return (
+    <form className="supplier-profile-form" onSubmit={submit}>
+      <div className="section-heading compact"><h1>Mi perfil</h1></div>
+      <section className="admin-panel">
+        <div className="admin-panel-title"><Store size={18} /> Información básica</div>
+        <div className="admin-form-grid">
+          <label>Código proveedor<input readOnly value={profile.supplierCode || ''} /></label>
+          <label>Estado<input readOnly value={getSupplierStatusLabel(profile.status)} /></label>
+          <label>Nombre<input value={form.name} onChange={update('name')} /></label>
+          <label>Razón social<input value={form.legalName} onChange={update('legalName')} /></label>
+          <label>Slug<input value={form.slug} onChange={update('slug')} /></label>
+          <label className="wide-field">Especialidades<input value={form.specialties} onChange={update('specialties')} /></label>
+          <label className="wide-field">Descripción corta<textarea value={form.shortDescription} onChange={update('shortDescription')} /></label>
+          <label className="wide-field">Descripción larga<textarea value={form.description} onChange={update('description')} /></label>
+          <label className="wide-field">Historia<textarea value={form.story} onChange={update('story')} /></label>
+        </div>
+      </section>
+      <section className="admin-panel">
+        <div className="admin-panel-title"><UserRound size={18} /> Origen y contacto</div>
+        <div className="admin-form-grid">
+          <label>País<input value={form.location.country || ''} onChange={updateNested('location', 'country')} /></label>
+          <label>Región<input value={form.location.region || ''} onChange={updateNested('location', 'region')} /></label>
+          <label>Provincia<input value={form.location.province || ''} onChange={updateNested('location', 'province')} /></label>
+          <label>Localidad<input value={form.location.town || ''} onChange={updateNested('location', 'town')} /></label>
+          <label>Contacto<input value={form.contact.contactPerson || ''} onChange={updateNested('contact', 'contactPerson')} /></label>
+          <label>Teléfono<input value={form.contact.phone || ''} onChange={updateNested('contact', 'phone')} /></label>
+          <label>Email<input value={form.contact.email || ''} onChange={updateNested('contact', 'email')} /></label>
+          <label>Web<input value={form.contact.website || ''} onChange={updateNested('contact', 'website')} /></label>
+          <label>Instagram<input value={form.contact.instagram || ''} onChange={updateNested('contact', 'instagram')} /></label>
+          <label>Facebook<input value={form.contact.facebook || ''} onChange={updateNested('contact', 'facebook')} /></label>
+        </div>
+      </section>
+      <section className="admin-panel">
+        <div className="admin-panel-title"><ImageUp size={18} /> Imágenes y certificaciones</div>
+        <div className="admin-form-grid">
+          <label className="wide-field">Logo URL<input value={form.logo.url || ''} onChange={updateNested('logo', 'url')} /></label>
+          <label className="wide-field">Imagen principal URL<input value={form.mainImage.url || ''} onChange={updateNested('mainImage', 'url')} /></label>
+          <label>Nombre fiscal<input value={form.business.taxName || ''} onChange={updateNested('business', 'taxName')} /></label>
+          <label>NIF/CIF<input value={form.business.taxId || ''} onChange={updateNested('business', 'taxId')} /></label>
+          {['artisan', 'ecological', 'dop', 'igp', 'localProduct', 'familyProduction', 'noIntermediaries'].map((field) => (
+            <label key={field} className="checkbox-field"><input type="checkbox" checked={Boolean(form.certifications[field])} onChange={updateNested('certifications', field)} /> {field}</label>
+          ))}
+        </div>
+      </section>
+      <button className="primary full" type="submit" disabled={state.busy}><Save size={18} /> Guardar perfil</button>
+    </form>
+  );
+}
+
+function SupplierProducts({ state, actions }) {
+  const navigate = useNavigate();
+  const products = state.supplierProducts || [];
+  return (
+    <section className="admin-panel supplier-own-products-panel">
+      <div className="admin-panel-title"><ShoppingBag size={19} /> Mis productos</div>
+      {products.length ? (
+        <div className="admin-list supplier-products-list">
+          {products.map((product) => {
+            const image = productModel.getImage(product);
+            const productId = product._id || product.id;
+            return (
+              <article className="collection-row with-thumb" key={productId || product.sku}>
+                <button className="admin-thumb" type="button" onClick={() => navigate('/supplier/products/' + productId + '/edit')}>
+                  {image ? <img src={image} alt="" /> : <Store size={18} />}
+                </button>
+                <button className="user-main supplier-product-summary" type="button" onClick={() => navigate('/supplier/products/' + productId + '/edit')}>
+                  <strong>{product.name}</strong>
+                  <span>{product.sku} · {product.category?.name || 'Sin categoría'} · {formatCurrency(product.price)} · Stock {product.stock ?? 0}</span>
+                </button>
+                <span className={'admin-badge ' + (product.status === 'published' ? 'success' : product.status === 'rejected' ? 'danger' : 'warning')}>{getProductStatusLabel(product.status)}</span>
+                <div className="supplier-product-actions">
+                  <button className="icon-button" type="button" onClick={() => navigate('/producto/' + productId)} title="Ver"><ShoppingBag size={16} /></button>
+                  <button className="icon-button" type="button" onClick={() => navigate('/supplier/products/' + productId + '/edit')} title="Editar"><Edit3 size={16} /></button>
+                  <button className="icon-button" type="button" onClick={() => { actions.selectSupplierProduct(product); navigate('/supplier/products/new'); }} title="Duplicar"><PackagePlus size={16} /></button>
+                  <button className="icon-button" type="button" onClick={() => navigate('/supplier/offers')} title="Oferta"><Percent size={16} /></button>
+                  <button className="icon-button danger-button" type="button" onClick={() => window.confirm('¿Eliminar este producto?') && actions.deleteSupplierProduct(product)} title="Eliminar"><Trash2 size={16} /></button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="empty-state compact-empty">Aún no tienes productos. Crea el primero desde “Nuevo producto”.</div>
+      )}
     </section>
+  );
+}
+
+function SupplierProductForm({ state, actions }) {
+  const { productId } = useParams();
+  const navigate = useNavigate();
+  const isEdit = Boolean(productId);
+  const status = state.supplierProfile?.status || 'pending_review';
+  const canManageProducts = !['inactive', 'rejected'].includes(status);
+  const product = useMemo(() => state.supplierProducts.find((item) => (item._id || item.id) === productId), [state.supplierProducts, productId]);
+
+  useEffect(() => {
+    if (isEdit && product) actions.selectSupplierProduct(product);
+    if (!isEdit) actions.resetSupplierProductForm();
+  }, [isEdit, productId, product]);
+
+  const updateProduct = (field) => (event) => actions.updateProductForm(field, event.target.value);
+  const updateImage = (field) => (event) => actions.updateImageForm(field, event.target.value);
+  const updateFiles = (event) => actions.updateImageForm('files', Array.from(event.target.files || []));
+  const getId = (item) => item?._id || item?.id || '';
+
+  return (
+    <form className="admin-panel supplier-product-editor" onSubmit={actions.saveSupplierProduct}>
+      <div className="admin-panel-title"><PackagePlus size={19} /> {isEdit ? 'Editar producto' : 'Nuevo producto'}</div>
+      <div className="admin-form-grid">
+        <label>Nombre<input required value={state.productForm.name} onChange={updateProduct('name')} disabled={!canManageProducts} /></label>
+        <label>SKU<input required value={state.productForm.sku} onChange={updateProduct('sku')} disabled={!canManageProducts} /></label>
+        <label>Precio<input required type="number" min="0.01" step="0.01" value={state.productForm.price} onChange={updateProduct('price')} disabled={!canManageProducts} /></label>
+        <label>Stock<input required type="number" min="0" step="1" value={state.productForm.stock} onChange={updateProduct('stock')} disabled={!canManageProducts} /></label>
+        <label>Categoría<select value={state.productForm.category} onChange={updateProduct('category')} disabled={!canManageProducts}><option value="">Sin categoría</option>{state.categories.map((category) => <option key={getId(category)} value={getId(category)}>{category.name}</option>)}</select></label>
+        <label>Estado<select value={state.productForm.status || 'pending_review'} onChange={updateProduct('status')} disabled={!canManageProducts}><option value="draft">Borrador</option><option value="pending_review">Enviar a revisión</option></select></label>
+        <label className="wide-field">Descripción corta<textarea value={state.productForm.shortDescription} onChange={updateProduct('shortDescription')} disabled={!canManageProducts} /></label>
+        <label className="wide-field">Descripción larga<textarea value={state.productForm.description} onChange={updateProduct('description')} disabled={!canManageProducts} /></label>
+      </div>
+      <section className="product-image-editor">
+        <div className="admin-panel-title"><ImageUp size={18} /> Imágenes</div>
+        {state.productForm.images?.length ? (
+          <div className="product-image-grid">
+            {state.productForm.images.map((image, index) => (
+              <article className="product-image-item" key={image.url + index}>
+                <img src={image.url} alt={image.name || state.productForm.name || 'Producto'} />
+                <div><strong>{index === 0 ? 'Principal' : image.name || 'Imagen'}</strong><span>{image.name || 'Sin nombre'}</span></div>
+                <button className="icon-button danger-button" type="button" onClick={() => actions.removeProductFormImage(index)} disabled={state.busy || !canManageProducts}><Trash2 size={16} /></button>
+              </article>
+            ))}
+          </div>
+        ) : <div className="empty-state compact-empty">Añade imágenes reales del producto.</div>}
+        <div className="admin-form-grid image-url-editor">
+          <label className="wide-field">URL de imagen<input type="url" value={state.imageForm.imageUrl} onChange={updateImage('imageUrl')} disabled={!canManageProducts} /></label>
+          <label>Nombre imagen<input value={state.imageForm.imageName} onChange={updateImage('imageName')} disabled={!canManageProducts} /></label>
+          <button className="secondary form-button" type="button" onClick={actions.addProductImageUrl} disabled={state.busy || !canManageProducts || !state.imageForm.imageUrl.trim()}><LinkIcon size={17} /> Añadir URL</button>
+        </div>
+        <div className="file-image-editor">
+          <label>Subir archivo<input type="file" accept="image/*" multiple onChange={updateFiles} disabled={!isEdit || !canManageProducts} /></label>
+          <div className="file-summary">{isEdit ? (state.imageForm.files.length ? state.imageForm.files.map((file) => file.name).join(', ') : 'Máximo 5 imágenes') : 'Guarda primero el producto para subir archivos.'}</div>
+          <button className="primary full" type="button" onClick={actions.uploadSupplierProductImages} disabled={state.busy || !isEdit || !canManageProducts || state.imageForm.files.length === 0}><ImageUp size={18} /> Subir archivo</button>
+        </div>
+      </section>
+      <section className="offer-editor">
+        <div className="admin-panel-title"><Percent size={18} /> Oferta</div>
+        <div className="admin-form-grid">
+          <label>Tipo<select value={state.productForm.offerType} onChange={updateProduct('offerType')} disabled={!canManageProducts}><option value="none">Sin oferta</option><option value="percent">% descuento</option><option value="amount">€ descuento</option><option value="bundle">Promoción por unidades</option></select></label>
+          {(state.productForm.offerType === 'percent' || state.productForm.offerType === 'amount') && <label>Valor<input type="number" min="0" step="0.01" value={state.productForm.offerValue} onChange={updateProduct('offerValue')} /></label>}
+          {state.productForm.offerType === 'bundle' && <><label>Unidades oferta<input type="number" min="2" step="1" value={state.productForm.offerBundleQuantity} onChange={updateProduct('offerBundleQuantity')} /></label><label>Unidades pagadas<input type="number" min="1" step="1" value={state.productForm.offerBundlePayQuantity} onChange={updateProduct('offerBundlePayQuantity')} /></label></>}
+          <label className="wide-field">Etiqueta<input value={state.productForm.offerLabel} onChange={updateProduct('offerLabel')} /></label>
+          <label>Vigente desde<input type="date" value={state.productForm.offerValidFrom} onChange={updateProduct('offerValidFrom')} /></label>
+          <label>Vigente hasta<input type="date" value={state.productForm.offerValidUntil} onChange={updateProduct('offerValidUntil')} /></label>
+        </div>
+      </section>
+      <div className="form-actions supplier-editor-actions">
+        <button className="secondary" type="button" onClick={() => navigate('/supplier/products')}>Cancelar</button>
+        <button className="primary" type="submit" disabled={state.busy || !canManageProducts}><Save size={18} /> {isEdit ? 'Guardar cambios' : 'Crear producto'}</button>
+      </div>
+    </form>
+  );
+}
+
+function SupplierOffers({ state }) {
+  const offered = state.supplierProducts.filter((product) => product.offer?.active || product.offer?.type !== 'none');
+  return (
+    <section className="admin-panel">
+      <div className="admin-panel-title"><Percent size={19} /> Ofertas propias</div>
+      {offered.length ? offered.map((product) => (
+        <article className="collection-row" key={product._id || product.id}>
+          <div className="user-main"><strong>{product.name}</strong><span>{product.sku} · {formatCurrency(product.price)} · {product.offer?.label || product.offer?.type}</span></div>
+          <span className="admin-badge warning">{product.offer?.active ? 'Activa' : 'Preparada'}</span>
+        </article>
+      )) : <div className="empty-state compact-empty">No tienes ofertas activas. Puedes gestionarlas editando cada producto.</div>}
+    </section>
+  );
+}
+
+function SupplierReports({ state }) {
+  const sales = state.supplierReports.sales || {};
+  const products = state.supplierReports.products || {};
+  return (
+    <section className="supplier-panel-view">
+      <div className="section-heading compact"><h1>Informes</h1><p>Solo datos de tus propios productos</p></div>
+      <div className="supplier-kpi-grid">
+        <article><span>Ingresos propios</span><strong>{formatCurrency(sales.totalRevenueFromOwnProducts || 0)}</strong></article>
+        <article><span>Unidades vendidas</span><strong>{sales.totalUnitsSoldFromOwnProducts || 0}</strong></article>
+        <article><span>Pedidos</span><strong>{sales.ordersWithOwnProducts || 0}</strong></article>
+        <article><span>Pendientes</span><strong>{sales.pendingOrdersContainingOwnProducts || 0}</strong></article>
+      </div>
+      <section className="admin-panel">
+        <div className="admin-panel-title"><BarChart3 size={19} /> Ventas por producto</div>
+        {(products.revenueByProduct || []).map((item) => (
+          <article className="collection-row" key={item.sku}><div className="user-main"><strong>{item.productName}</strong><span>{item.sku} · {item.units} unidades</span></div><strong>{formatCurrency(item.revenue)}</strong></article>
+        ))}
+      </section>
+    </section>
+  );
+}
+
+function SupplierOrders({ state }) {
+  return (
+    <section className="admin-panel">
+      <div className="admin-panel-title"><FileText size={19} /> Pedidos con mis productos</div>
+      {state.supplierOrders.length ? state.supplierOrders.map((order) => (
+        <article className="collection-row supplier-order-row" key={order.orderId}>
+          <div className="user-main"><strong>{new Date(order.date).toLocaleDateString('es-ES')} · {order.status}</strong><span>{order.lines.map((line) => line.productName + ' x' + line.units).join(', ')}</span></div>
+          <strong>{formatCurrency(order.ownRevenue)}</strong>
+        </article>
+      )) : <div className="empty-state compact-empty">Todavía no hay pedidos con productos tuyos.</div>}
+    </section>
+  );
+}
+
+export function SupplierView({ state, actions }) {
+  const location = useLocation();
+  const section = getSupplierSection(location.pathname);
+
+  if (section === 'register') return <SupplierPublicAuth state={state} actions={actions} mode="register" />;
+  if (section === 'login') return <SupplierPublicAuth state={state} actions={actions} mode="login" />;
+  if (state.session?.user?.role !== 'supplier') return <AccessDeniedSupplier actions={actions} />;
+
+  return (
+    <SupplierLayout state={state} actions={actions}>
+      {section === 'dashboard' && <SupplierDashboard state={state} actions={actions} />}
+      {section === 'profile' && <SupplierProfile state={state} actions={actions} />}
+      {section === 'products' && <SupplierProducts state={state} actions={actions} />}
+      {(section === 'product-new' || section === 'product-edit') && <SupplierProductForm state={state} actions={actions} />}
+      {section === 'offers' && <SupplierOffers state={state} />}
+      {section === 'reports' && <SupplierReports state={state} />}
+      {section === 'orders' && <SupplierOrders state={state} />}
+      {section === 'settings' && <SupplierProfile state={state} actions={actions} />}
+    </SupplierLayout>
   );
 }

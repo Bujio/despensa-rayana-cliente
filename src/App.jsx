@@ -6,6 +6,7 @@ function readRoute(location) {
   const catalogCategoryMatch = matchPath('/catalogo/:categorySlug', location.pathname);
   const productMatch = matchPath('/producto/:productId', location.pathname);
   const adminMatch = matchPath('/admin/:adminSection', location.pathname);
+  const supplierMatch = matchPath('/supplier/*', location.pathname);
   if (catalogCategoryMatch) {
     return {
       categorySlug: catalogCategoryMatch.params.categorySlug || '',
@@ -27,6 +28,14 @@ function readRoute(location) {
       categorySlug: '',
       productId: '',
       view: 'admin',
+    };
+  }
+
+  if (supplierMatch) {
+    return {
+      categorySlug: '',
+      productId: '',
+      view: 'supplier',
     };
   }
 
