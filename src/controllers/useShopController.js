@@ -325,6 +325,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [adminSuppliers, setAdminSuppliers] = useState([]);
   const [supplierProfile, setSupplierProfile] = useState(null);
   const [supplierProducts, setSupplierProducts] = useState([]);
+  const [selectedSupplierProductId, setSelectedSupplierProductId] = useState('');
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUserForm, setAdminUserForm] = useState(() => ({ ...initialAdminUserForm }));
   const [selectedAdminUserId, setSelectedAdminUserId] = useState('');
@@ -461,6 +462,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         loadAdminUsers();
         loadAdminReviews();
       }
+      if (session.user?.role === 'supplier') {
+        loadSupplierPanel();
+      }
     } else {
       setCart(null);
       setOrders([]);
@@ -473,6 +477,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAdminSuppliers([]);
       setSupplierProfile(null);
       setSupplierProducts([]);
+      setSelectedSupplierProductId('');
       setAdminUsers([]);
       setAdminUserForm({ ...initialAdminUserForm });
       setSelectedAdminUserId('');
@@ -642,6 +647,71 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     } catch (error) {
       setNotice(error.message);
       setSupplierProducts([]);
+    }
+  }
+
+  function resetSupplierProductForm() {
+    setSelectedSupplierProductId('');
+    setProductForm({
+      ...initialProductForm,
+      supplierId: '0',
+      supplierName: supplierProfile?.name || session?.user?.name || '',
+    });
+    setImageForm((current) => ({ ...current, productId: '', files: [], imageUrl: '', imageName: '' }));
+  }
+
+  function selectSupplierProduct(product) {
+    const productId = product?._id || product?.id || '';
+    setSelectedSupplierProductId(productId);
+    setProductForm(getProductFormFromProduct(product, {
+      id: 0,
+      name: supplierProfile?.name || session?.user?.name || '',
+      images: [],
+    }));
+    setImageForm((current) => ({ ...current, productId, files: [], imageUrl: '', imageName: '' }));
+  }
+
+  async function saveSupplierProduct(event) {
+    event.preventDefault();
+    if (session?.user?.role !== 'supplier') return;
+
+    setBusy(true);
+    try {
+      if (selectedSupplierProductId) {
+        await supplierModel.updateProduct(request, selectedSupplierProductId, productForm);
+        setNotice('Producto actualizado correctamente.');
+      } else {
+        const saved = await supplierModel.createProduct(request, productForm);
+        setImageForm((current) => ({ ...current, productId: saved._id || saved.id || '' }));
+        setNotice('Producto creado correctamente. Queda pendiente de revisión.');
+      }
+      resetSupplierProductForm();
+      await loadSupplierPanel();
+      await loadProducts();
+      await loadFeaturedProducts();
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSupplierProduct(product) {
+    const productId = product?._id || product?.id;
+    if (!productId || session?.user?.role !== 'supplier') return;
+
+    setBusy(true);
+    try {
+      await supplierModel.deleteProduct(request, productId);
+      if (selectedSupplierProductId === productId) resetSupplierProductForm();
+      await loadSupplierPanel();
+      await loadProducts();
+      await loadFeaturedProducts();
+      setNotice('Producto eliminado correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1764,6 +1834,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       selectedAdminOrderId,
       selectedAdminCategoryId,
       selectedAdminProductId,
+      selectedSupplierProductId,
       selectedAdminSupplierId,
       selectedAdminSupplierKey,
       supplierForm,
@@ -1801,6 +1872,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       resetFilters,
       resetCategoryForm,
       resetProductForm,
+      resetSupplierProductForm,
       resetSupplierForm,
       saveAdminSupplier,
       setAdminSupplierAction,
@@ -1809,6 +1881,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       selectAdminCategory,
       selectAdminProduct,
       selectAdminSupplier,
+      selectSupplierProduct,
       selectAccountReview,
       setAuthMode: changeAuthMode,
       setAdminTab,
@@ -1850,10 +1923,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       resetHomeContent,
       saveHomeContentSettings,
       saveImageUrl,
+      saveSupplierProduct,
       loadSupplierPanel,
       submitProductReview,
       uploadProductImages,
       deleteOrder,
+      deleteSupplierProduct,
       deleteAdminSupplier,
     },
   };
