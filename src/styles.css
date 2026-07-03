@@ -3553,3 +3553,24 @@ main {
     grid-template-columns: 1fr;
   }
 }
+
+.form-feedback {
+  margin: -2px 0 0;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.form-feedback.error {
+  border: 1px solid rgba(159, 44, 31, 0.24);
+  background: #fff0ed;
+  color: #8f2a1f;
+}
+
+.form-feedback.success {
+  border: 1px solid rgba(49, 92, 69, 0.22);
+  background: #eef7ed;
+  color: #234f39;
+}

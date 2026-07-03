@@ -1,7 +1,7 @@
 import { ArrowLeft, MessageSquare, Save, Star, Store, Trash2, UserRound } from 'lucide-react';
 
 export function AccountView({ state, actions }) {
-  const { accountReviewForm, authForm, authMode, busy, myReviews, selectedAccountReviewId, session } = state;
+  const { accountReviewForm, authFeedback, authForm, authMode, busy, myReviews, selectedAccountReviewId, session } = state;
 
   const update = (field) => (event) => actions.updateAuthForm(field, event.target.value);
   const updateReview = (field) => (event) => actions.updateAccountReviewForm(field, event.target.value);
@@ -131,6 +131,11 @@ export function AccountView({ state, actions }) {
             <button className="primary full" type="submit" disabled={busy}>
               {isSupplierRegister ? <Store size={18} /> : <UserRound size={18} />} {authMode === 'login' ? 'Entrar' : isSupplierRegister ? 'Solicitar alta como proveedor' : 'Crear cuenta'}
             </button>
+            {authFeedback?.message && (
+              <p className={'form-feedback ' + authFeedback.type} role={authFeedback.type === 'error' ? 'alert' : 'status'}>
+                {authFeedback.message}
+              </p>
+            )}
           </div>
         )}
       </form>

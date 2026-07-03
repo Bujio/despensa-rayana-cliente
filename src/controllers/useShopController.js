@@ -12,6 +12,22 @@ import { orderModel } from '../models/orderModel.js';
 import { sessionModel } from '../models/sessionModel.js';
 import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
 
+
+function translateAuthMessage(message) {
+  const value = String(message || '').toLowerCase();
+  if (!value) return 'No se pudo completar la operación.';
+  if (value.includes('invalid credentials')) return 'El email o la contraseña no son correctos.';
+  if (value.includes('email already in use')) return 'Ya existe una cuenta con este email.';
+  if (value.includes('password must be at least')) return 'La contraseña debe tener al menos 6 caracteres.';
+  if (value.includes('password must contain at least one uppercase')) return 'La contraseña debe incluir al menos una letra mayúscula.';
+  if (value.includes('password must contain at least one number')) return 'La contraseña debe incluir al menos un número.';
+  if (value.includes('invalid email')) return 'Introduce un email válido.';
+  if (value.includes('name must be at least')) return 'El nombre debe tener al menos 2 caracteres.';
+  if (value.includes('too many')) return 'Se han realizado demasiados intentos. Inténtalo de nuevo más tarde.';
+  if (value.includes('failed to fetch') || value.includes('networkerror')) return 'No se ha podido conectar con el servidor.';
+  return message || 'No se pudo completar la operación.';
+}
+
 const initialAuthForm = {
   accountType: '',
   name: '',
@@ -300,6 +316,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [notice, setNotice] = useState('');
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState(() => ({ ...initialAuthForm }));
+  const [authFeedback, setAuthFeedback] = useState(null);
   const [adminTab, setAdminTab] = useState('dashboard');
   const [adminSearch, setAdminSearchState] = useState(() => ({ ...initialAdminSearch }));
   const [adminProducts, setAdminProducts] = useState([]);
@@ -639,6 +656,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     event.preventDefault();
     setBusy(true);
     setNotice('');
+    setAuthFeedback(null);
     try {
       if (authMode === 'login') {
         const next = await authModel.login(authForm.email, authForm.password);
@@ -647,7 +665,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         setNotice('Bienvenido, ' + (next.user?.name || 'cliente'));
       } else {
         if (!authForm.accountType) {
-          setNotice('Elige si quieres darte de alta como cliente o proveedor.');
+          setAuthFeedback({ type: 'error', message: 'Elige si quieres darte de alta como cliente o proveedor.' });
           return;
         }
 
@@ -672,17 +690,23 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
           });
           setAuthMode('login');
           setAuthForm({ ...initialAuthForm, email: authForm.email });
-          setNotice(result?.message || 'Solicitud de proveedor registrada. Queda pendiente de revisión.');
+          setAuthFeedback({
+            type: 'success',
+            message: result?.message || 'Solicitud de proveedor registrada correctamente. Tu perfil queda pendiente de revisión.',
+          });
           return;
         }
 
         await authModel.register(payload);
         setAuthMode('login');
         setAuthForm({ ...initialAuthForm, email: authForm.email });
-        setNotice('Cuenta creada. Revisa el correo para verificarla antes de comprar.');
+        setAuthFeedback({
+          type: 'success',
+          message: 'Cuenta creada correctamente. Revisa el correo para verificarla antes de comprar.',
+        });
       }
     } catch (error) {
-      setNotice(error.message);
+      setAuthFeedback({ type: 'error', message: translateAuthMessage(error.message) });
     } finally {
       setBusy(false);
     }
@@ -1021,11 +1045,18 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   };
 
   const updateAuthForm = (field, value) => {
+    setAuthFeedback(null);
     setAuthForm((current) => ({ ...current, [field]: value }));
   };
 
   const chooseAccountType = (accountType) => {
+    setAuthFeedback(null);
     setAuthForm((current) => ({ ...current, accountType }));
+  };
+
+  const changeAuthMode = (mode) => {
+    setAuthFeedback(null);
+    setAuthMode(mode);
   };
 
   const updateCategoryForm = (field, value) => {
@@ -1677,6 +1708,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       accountReviewForm,
       adminUserForm,
       adminUsers,
+      authFeedback,
       authForm,
       authMode,
       busy,
@@ -1755,7 +1787,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       selectAdminProduct,
       selectAdminSupplier,
       selectAccountReview,
-      setAuthMode,
+      setAuthMode: changeAuthMode,
       setAdminTab,
       setAdminSearch,
       setFilter,
