@@ -3436,3 +3436,16 @@ main {
     width: 100%;
   }
 }
+
+.supplier-danger-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 680px) {
+  .supplier-danger-actions {
+    display: grid;
+    width: 100%;
+  }
+}

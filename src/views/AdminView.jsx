@@ -70,10 +70,34 @@ function includesSearch(values, query) {
 }
 
 function getRoleLabel(role) {
-  return role === 'admin' ? 'Admin' : 'Cliente';
+  if (role === 'admin') return 'Admin';
+  if (role === 'supplier') return 'Proveedor';
+  return 'Cliente';
+}
+
+function getSupplierStatusLabel(status) {
+  const labels = {
+    pending_review: 'Pendiente de revisión',
+    active: 'Activo',
+    inactive: 'Inactivo',
+    draft: 'Borrador',
+    rejected: 'Rechazado',
+  };
+  return labels[status] || 'Sin estado';
+}
+
+function getSupplierStatusTone(status) {
+  if (status === 'active') return 'success';
+  if (status === 'rejected' || status === 'inactive') return 'danger';
+  if (status === 'pending_review') return 'warning';
+  return 'neutral';
 }
 
 function getProductStatus(product) {
+  if (product?.status === 'draft') return ['Borrador', 'neutral'];
+  if (product?.status === 'pending_review') return ['Pendiente', 'warning'];
+  if (product?.status === 'rejected') return ['Rechazado', 'danger'];
+  if (product?.status === 'inactive') return ['Inactivo', 'danger'];
   if (!productModel.getImage(product)) return ['Sin imagen', 'warning'];
   if (Number(product.stock || 0) === 0) return ['Agotado', 'danger'];
   if (Number(product.stock || 0) <= 5) return ['Bajo stock', 'warning'];
@@ -199,6 +223,7 @@ export function AdminView({ state, actions }) {
     adminProducts,
     adminReviews,
     adminSearch,
+    adminSuppliers,
     adminTab,
     adminUserForm,
     adminUsers,
@@ -214,6 +239,7 @@ export function AdminView({ state, actions }) {
     selectedAdminOrder,
     selectedAdminOrderId,
     selectedAdminProductId,
+    selectedAdminSupplierId,
     selectedAdminSupplierKey,
     supplierForm,
     selectedAdminUser,
@@ -352,30 +378,23 @@ export function AdminView({ state, actions }) {
     review.rating,
   ], adminSearch.reviews));
 
-  const supplierRecords = Array.from(adminProducts.reduce((records, product) => {
-    const supplier = product.supplier || {};
-    const key = getSupplierKey(supplier);
-    if (!key) return records;
-
-    const current = records.get(key) || {
-      key,
-      id: supplier.id ?? '',
-      name: supplier.name || 'Proveedor sin nombre',
-      products: [],
-    };
-    current.products.push(product);
-    records.set(key, current);
-    return records;
-  }, new Map()).values()).sort((first, second) => first.name.localeCompare(second.name, 'es'));
+  const supplierRecords = (adminSuppliers || []).map((supplier) => ({
+    ...supplier,
+    key: getSupplierKey(supplier),
+    products: Array.isArray(supplier.products) ? supplier.products : [],
+  })).sort((first, second) => (first.name || '').localeCompare(second.name || '', 'es'));
 
   const filteredSuppliers = supplierRecords.filter((supplier) => includesSearch([
     supplier.name,
-    supplier.id,
+    supplier.legalName,
+    supplier.email,
+    supplier.supplierCode,
+    getSupplierStatusLabel(supplier.status),
     supplier.products.map((product) => product.name).join(' '),
     supplier.products.map((product) => product.sku).join(' '),
   ], adminSearch.suppliers));
 
-  const selectedAdminSupplier = supplierRecords.find((supplier) => supplier.key === selectedAdminSupplierKey) || null;
+  const selectedAdminSupplier = supplierRecords.find((supplier) => (supplier._id || supplier.id) === selectedAdminSupplierId) || null;
 
   const filteredMediaProducts = adminProducts.filter((product) => includesSearch([
     product.name,
@@ -745,6 +764,7 @@ export function AdminView({ state, actions }) {
                     <select value={adminUserForm.role} onChange={updateUser('role')}>
                       <option value="user">Cliente</option>
                       <option value="admin">Admin</option>
+                      <option value="supplier">Proveedor</option>
                     </select>
                   </label>
                   <label>Calle<input value={adminUserForm.street} onChange={updateUser('street')} /></label>
@@ -1120,16 +1140,16 @@ export function AdminView({ state, actions }) {
             <div className="admin-panel-title"><Store size={19} /> Proveedores</div>
             <label className="input-wrap admin-search">
               <Search size={17} />
-              <input value={adminSearch.suppliers} onChange={(event) => actions.setAdminSearch('suppliers', event.target.value)} placeholder="Buscar proveedor, producto o SKU..." />
+              <input value={adminSearch.suppliers} onChange={(event) => actions.setAdminSearch('suppliers', event.target.value)} placeholder="Buscar proveedor, código, estado o producto..." />
             </label>
             <div className="admin-list">
               {filteredSuppliers.length ? filteredSuppliers.map((supplier) => (
-                <article className={'collection-row' + (selectedAdminSupplierKey === supplier.key ? ' active' : '')} key={supplier.key}>
+                <article className={'collection-row' + (selectedAdminSupplierId === (supplier._id || supplier.id) ? ' active' : '')} key={supplier._id || supplier.id || supplier.key}>
                   <button className="user-main" type="button" onClick={() => actions.selectAdminSupplier(supplier)}>
-                    <strong>{supplier.name}</strong>
-                    <span>ID {supplier.id || 'sin ID'} · {supplier.products.length} productos asociados</span>
+                    <strong>{supplier.name || 'Proveedor sin nombre'}</strong>
+                    <span>{supplier.supplierCode || 'sin código'} · {supplier.productCount ?? supplier.products.length} productos · {supplier.email || 'sin email'}</span>
                   </button>
-                  <AdminBadge tone="success">Activo</AdminBadge>
+                  <AdminBadge tone={getSupplierStatusTone(supplier.status)}>{getSupplierStatusLabel(supplier.status)}</AdminBadge>
                 </article>
               )) : (
                 <div className="empty-state compact-empty">No hay proveedores para mostrar.</div>
@@ -1138,25 +1158,39 @@ export function AdminView({ state, actions }) {
           </section>
 
           <section className="admin-panel supplier-detail-panel">
-            <div className="admin-panel-title"><Store size={19} /> Datos del proveedor</div>
+            <div className="admin-panel-title"><Store size={19} /> Revisión del proveedor</div>
             {selectedAdminSupplier ? (
               <form className="admin-form-grid" onSubmit={actions.saveAdminSupplier}>
-                <label>ID proveedor<input type="number" min="0" step="1" value={supplierForm.id} onChange={updateSupplier('id')} /></label>
-                <label className="wide-field">Nombre<input value={supplierForm.name} onChange={updateSupplier('name')} placeholder="Nombre del proveedor" /></label>
+                <label>Código<input readOnly value={selectedAdminSupplier.supplierCode || ''} /></label>
+                <label>Estado<input readOnly value={getSupplierStatusLabel(selectedAdminSupplier.status)} /></label>
+                <label className="wide-field">Nombre<input readOnly value={supplierForm.name} /></label>
+                <label className="wide-field">Razón social<input readOnly value={supplierForm.legalName} /></label>
+                <label>Teléfono<input readOnly value={supplierForm.phone} /></label>
+                <label>Email<input readOnly value={selectedAdminSupplier.email || ''} /></label>
+                <label className="wide-field">Notas internas<textarea value={supplierForm.internalNotes} onChange={updateSupplier('internalNotes')} placeholder="Notas visibles solo para administración" /></label>
+                <label className="checkbox-field wide-field">
+                  <input type="checkbox" checked={Boolean(supplierForm.featured)} onChange={(event) => actions.updateSupplierForm('featured', event.target.checked)} />
+                  Marcar como destacado
+                </label>
                 <div className="wide-field supplier-summary">
-                  <strong>{selectedAdminSupplier.products.length}</strong>
+                  <strong>{selectedAdminSupplier.productCount ?? selectedAdminSupplier.products.length}</strong>
                   <span>productos asociados a este proveedor</span>
                 </div>
                 <div className="form-actions supplier-form-actions wide-field">
-                  <button className="danger-button destructive-action" type="button" onClick={actions.deleteAdminSupplier} disabled={busy}><Trash2 size={16} /> Eliminar proveedor</button>
+                  <div className="supplier-danger-actions">
+                    <button className="danger-button destructive-action" type="button" onClick={() => actions.setAdminSupplierAction('reject')} disabled={busy || selectedAdminSupplier.status === 'rejected'}><Trash2 size={16} /> Rechazar</button>
+                    <button className="secondary" type="button" onClick={() => actions.setAdminSupplierAction('deactivate')} disabled={busy || selectedAdminSupplier.status === 'inactive'}>Desactivar</button>
+                  </div>
                   <div className="supplier-save-actions">
                     <button className="secondary" type="button" onClick={actions.resetSupplierForm}>Cancelar</button>
-                    <button className="primary" type="submit" disabled={busy}>Guardar cambios</button>
+                    <button className="secondary" type="button" onClick={() => actions.setAdminSupplierAction('reactivate')} disabled={busy || selectedAdminSupplier.status === 'active'}>Reactivar</button>
+                    <button className="primary" type="button" onClick={() => actions.setAdminSupplierAction('approve')} disabled={busy || selectedAdminSupplier.status === 'active'}>Aprobar proveedor</button>
+                    <button className="primary" type="submit" disabled={busy}>Guardar notas</button>
                   </div>
                 </div>
               </form>
             ) : (
-              <div className="empty-state compact-empty">Selecciona un proveedor para ver y modificar sus datos.</div>
+              <div className="empty-state compact-empty">Selecciona un proveedor para ver y revisar su solicitud.</div>
             )}
           </section>
 
@@ -1164,7 +1198,7 @@ export function AdminView({ state, actions }) {
             <div className="admin-panel-title"><ShoppingBag size={19} /> Productos del proveedor</div>
             {selectedAdminSupplier ? (
               <div className="admin-list supplier-products-list">
-                {selectedAdminSupplier.products.map((product) => {
+                {selectedAdminSupplier.products.length ? selectedAdminSupplier.products.map((product) => {
                   const [statusLabel, statusTone] = getProductStatus(product);
                   const image = productModel.getImage(product);
                   return (
@@ -1172,12 +1206,12 @@ export function AdminView({ state, actions }) {
                       <div className="admin-thumb">{image ? <img src={image} alt="" /> : <ShoppingBag size={18} />}</div>
                       <button className="user-main" type="button" onClick={() => { actions.openAdminTab('products'); actions.selectAdminProduct(product); }}>
                         <strong>{product.name}</strong>
-                        <span>{product.sku} · {formatCurrency(product.price)} · Stock {product.stock ?? 0}</span>
+                        <span>{product.sku} · {formatCurrency(product.price)} · Stock {product.stock ?? 0} · {product.status || 'published'}</span>
                       </button>
                       <AdminBadge tone={statusTone}>{statusLabel}</AdminBadge>
                     </article>
                   );
-                })}
+                }) : <div className="empty-state compact-empty">Este proveedor aún no tiene productos.</div>}
               </div>
             ) : (
               <div className="empty-state compact-empty">Los productos aparecerán al seleccionar un proveedor.</div>

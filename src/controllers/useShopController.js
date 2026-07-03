@@ -60,8 +60,13 @@ const initialAdminSearch = {
 };
 
 const initialSupplierForm = {
-  id: '',
   name: '',
+  legalName: '',
+  phone: '',
+  status: '',
+  featured: false,
+  internalNotes: '',
+  rejectionReason: '',
 };
 
 const initialImageForm = {
@@ -152,7 +157,7 @@ const formatDateInput = (value) => {
 };
 
 const getProductId = (product) => String(product?._id || product?.id || product?.sku || '');
-const getSupplierKey = (supplier) => String(supplier?.id ?? supplier?.name ?? '').trim();
+const getSupplierKey = (supplier) => String(supplier?._id || supplier?.id || supplier?.supplierCode || supplier?.name || '').trim();
 
 function getProductFormFromProduct(product, supplierOverride = null) {
   const offer = product?.offer || {};
@@ -295,12 +300,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [adminTab, setAdminTab] = useState('dashboard');
   const [adminSearch, setAdminSearchState] = useState(() => ({ ...initialAdminSearch }));
   const [adminProducts, setAdminProducts] = useState([]);
+  const [adminSuppliers, setAdminSuppliers] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUserForm, setAdminUserForm] = useState(() => ({ ...initialAdminUserForm }));
   const [selectedAdminUserId, setSelectedAdminUserId] = useState('');
   const [selectedAdminOrderId, setSelectedAdminOrderId] = useState('');
   const [selectedAdminProductId, setSelectedAdminProductId] = useState('');
   const [selectedAdminCategoryId, setSelectedAdminCategoryId] = useState('');
+  const [selectedAdminSupplierId, setSelectedAdminSupplierId] = useState('');
   const [selectedAdminSupplierKey, setSelectedAdminSupplierKey] = useState('');
   const [supplierForm, setSupplierForm] = useState(() => ({ ...initialSupplierForm }));
   const [categoryForm, setCategoryForm] = useState(() => ({ ...initialCategoryForm }));
@@ -426,6 +433,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       loadMyReviews();
       if (session.user?.role === 'admin') {
         loadAdminProducts();
+        loadAdminSuppliers();
         loadAdminUsers();
         loadAdminReviews();
       }
@@ -438,12 +446,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAccountReviewForm({ ...emptyReviewForm });
       setSelectedAccountReviewId('');
       setAdminProducts([]);
+      setAdminSuppliers([]);
       setAdminUsers([]);
       setAdminUserForm({ ...initialAdminUserForm });
       setSelectedAdminUserId('');
       setSelectedAdminOrderId('');
       setSelectedAdminProductId('');
       setSelectedAdminCategoryId('');
+      setSelectedAdminSupplierId('');
       setSelectedAdminSupplierKey('');
       setSupplierForm({ ...initialSupplierForm });
       setAdminTab('dashboard');
@@ -569,12 +579,26 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   async function loadAdminProducts() {
     try {
+      if (session?.user?.role === 'admin') {
+        setAdminProducts(await adminModel.listProducts(request));
+        return;
+      }
+
       const result = await catalogModel.listProducts({
         page: 1,
         filters: { ...emptyFilters, inStock: false },
         limit: 100,
       });
       setAdminProducts(result.products);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
+  async function loadAdminSuppliers() {
+    if (session?.user?.role !== 'admin') return;
+    try {
+      setAdminSuppliers(await adminModel.listSuppliers(request));
     } catch (error) {
       setNotice(error.message);
     }
@@ -1283,50 +1307,112 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setImageForm({ ...initialImageForm });
   }
 
-  function selectAdminSupplier(supplier) {
+  async function selectAdminSupplier(supplier) {
+    const supplierId = supplier?._id || supplier?.id || '';
     const key = getSupplierKey(supplier);
+    setSelectedAdminSupplierId(supplierId);
     setSelectedAdminSupplierKey(key);
     setSupplierForm({
-      id: supplier?.id ?? '',
       name: supplier?.name || '',
+      legalName: supplier?.legalName || '',
+      phone: supplier?.phone || '',
+      status: supplier?.status || '',
+      featured: Boolean(supplier?.featured),
+      internalNotes: supplier?.internalNotes || '',
+      rejectionReason: supplier?.rejectionReason || '',
     });
+
+    if (!supplierId) return;
+    setBusy(true);
+    try {
+      const detail = await adminModel.getSupplier(request, supplierId);
+      setAdminSuppliers((current) => current.map((item) => (
+        (item._id || item.id) === supplierId ? { ...item, ...detail } : item
+      )));
+      setSupplierForm({
+        name: detail?.name || '',
+        legalName: detail?.legalName || '',
+        phone: detail?.phone || '',
+        status: detail?.status || '',
+        featured: Boolean(detail?.featured),
+        internalNotes: detail?.internalNotes || '',
+        rejectionReason: detail?.rejectionReason || '',
+      });
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function resetSupplierForm() {
+    setSelectedAdminSupplierId('');
     setSelectedAdminSupplierKey('');
     setSupplierForm({ ...initialSupplierForm });
   }
 
-  async function saveAdminSupplier(event) {
-    event.preventDefault();
-    if (!selectedAdminSupplierKey) {
-      setNotice('Selecciona un proveedor para editarlo.');
-      return;
+  async function refreshSelectedSupplier(supplierId = selectedAdminSupplierId) {
+    await loadAdminSuppliers();
+    if (!supplierId) return;
+    try {
+      const detail = await adminModel.getSupplier(request, supplierId);
+      setAdminSuppliers((current) => {
+        const exists = current.some((item) => (item._id || item.id) === supplierId);
+        return exists
+          ? current.map((item) => ((item._id || item.id) === supplierId ? { ...item, ...detail } : item))
+          : [detail, ...current];
+      });
+      setSupplierForm({
+        name: detail?.name || '',
+        legalName: detail?.legalName || '',
+        phone: detail?.phone || '',
+        status: detail?.status || '',
+        featured: Boolean(detail?.featured),
+        internalNotes: detail?.internalNotes || '',
+        rejectionReason: detail?.rejectionReason || '',
+      });
+    } catch {
+      // La lista ya se ha refrescado; si falla el detalle no bloqueamos la vista.
     }
+  }
 
-    const nextSupplier = {
-      id: Number(supplierForm.id || 0),
-      name: supplierForm.name.trim(),
-    };
-    const supplierProducts = adminProducts.filter((product) => getSupplierKey(product.supplier) === selectedAdminSupplierKey);
-
-    if (!supplierProducts.length) {
-      setNotice('Este proveedor no tiene productos asociados.');
+  async function setAdminSupplierAction(action, options = {}) {
+    if (!selectedAdminSupplierId) {
+      setNotice('Selecciona un proveedor para gestionarlo.');
       return;
     }
 
     setBusy(true);
     try {
-      await Promise.all(supplierProducts.map((product) => adminModel.updateProduct(
-        request,
-        product._id || product.id,
-        getProductFormFromProduct(product, nextSupplier),
-      )));
-      await loadProducts();
-      await loadFeaturedProducts();
+      if (action === 'approve') await adminModel.approveSupplier(request, selectedAdminSupplierId);
+      if (action === 'reject') await adminModel.rejectSupplier(request, selectedAdminSupplierId, options.reason || supplierForm.rejectionReason || '');
+      if (action === 'deactivate') await adminModel.deactivateSupplier(request, selectedAdminSupplierId);
+      if (action === 'reactivate') await adminModel.reactivateSupplier(request, selectedAdminSupplierId);
+      if (action === 'featured') await adminModel.setSupplierFeatured(request, selectedAdminSupplierId, options.featured);
+      await refreshSelectedSupplier(selectedAdminSupplierId);
       await loadAdminProducts();
-      setSelectedAdminSupplierKey(getSupplierKey(nextSupplier));
-      setNotice('Proveedor actualizado en sus productos.');
+      await loadProducts();
+      setNotice('Proveedor actualizado correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveAdminSupplier(event) {
+    event.preventDefault();
+    if (!selectedAdminSupplierId) {
+      setNotice('Selecciona un proveedor para editarlo.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await adminModel.setSupplierInternalNotes(request, selectedAdminSupplierId, supplierForm.internalNotes);
+      await adminModel.setSupplierFeatured(request, selectedAdminSupplierId, Boolean(supplierForm.featured));
+      await refreshSelectedSupplier(selectedAdminSupplierId);
+      setNotice('Notas y destacado del proveedor guardados.');
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -1335,26 +1421,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }
 
   async function deleteAdminSupplier() {
-    if (!selectedAdminSupplierKey) return;
-    const supplierProducts = adminProducts.filter((product) => getSupplierKey(product.supplier) === selectedAdminSupplierKey);
-
-    setBusy(true);
-    try {
-      await Promise.all(supplierProducts.map((product) => adminModel.updateProduct(
-        request,
-        product._id || product.id,
-        getProductFormFromProduct(product, { id: 0, name: '', images: [] }),
-      )));
-      resetSupplierForm();
-      await loadProducts();
-      await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice('Proveedor eliminado de sus productos.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
+    await setAdminSupplierAction('deactivate');
   }
 
   function selectAdminUser(user) {
@@ -1577,6 +1644,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     state: {
       adminTab,
       adminProducts,
+      adminSuppliers,
       adminSearch,
       adminReviews,
       accountReviewForm,
@@ -1616,6 +1684,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       selectedAdminOrderId,
       selectedAdminCategoryId,
       selectedAdminProductId,
+      selectedAdminSupplierId,
       selectedAdminSupplierKey,
       supplierForm,
       selectedAdminUser,
@@ -1651,6 +1720,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       resetProductForm,
       resetSupplierForm,
       saveAdminSupplier,
+      setAdminSupplierAction,
       saveAdminUser,
       saveAccountReview,
       selectAdminCategory,

@@ -55,6 +55,53 @@ export const adminModel = {
     return Array.isArray(result) ? result : result?.data || [];
   },
 
+  async listProducts(request) {
+    const result = await request('/products/admin/all?limit=100');
+    return Array.isArray(result) ? result : result?.data || [];
+  },
+
+  async listSuppliers(request) {
+    const result = await request('/suppliers');
+    return Array.isArray(result) ? result : result?.data || [];
+  },
+
+  getSupplier(request, supplierId) {
+    return request('/suppliers/' + supplierId);
+  },
+
+  approveSupplier(request, supplierId) {
+    return request('/suppliers/' + supplierId + '/approve', { method: 'PATCH' });
+  },
+
+  rejectSupplier(request, supplierId, reason = '') {
+    return request('/suppliers/' + supplierId + '/reject', {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  deactivateSupplier(request, supplierId) {
+    return request('/suppliers/' + supplierId + '/deactivate', { method: 'PATCH' });
+  },
+
+  reactivateSupplier(request, supplierId) {
+    return request('/suppliers/' + supplierId + '/reactivate', { method: 'PATCH' });
+  },
+
+  setSupplierFeatured(request, supplierId, featured) {
+    return request('/suppliers/' + supplierId + '/featured', {
+      method: 'PATCH',
+      body: JSON.stringify({ featured }),
+    });
+  },
+
+  setSupplierInternalNotes(request, supplierId, internalNotes) {
+    return request('/suppliers/' + supplierId + '/internal-notes', {
+      method: 'PATCH',
+      body: JSON.stringify({ internalNotes }),
+    });
+  },
+
   updateUser(request, userId, form) {
     const payload = {
       name: form.name.trim(),
