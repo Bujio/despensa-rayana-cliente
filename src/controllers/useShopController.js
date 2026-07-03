@@ -10,6 +10,7 @@ import { favoritesModel } from '../models/favoritesModel.js';
 import { homeContentModel } from '../models/homeContentModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { sessionModel } from '../models/sessionModel.js';
+import { supplierModel } from '../models/supplierModel.js';
 import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
 
 
@@ -212,6 +213,7 @@ const routeByView = {
   orders: '/pedidos',
   account: '/cuenta',
   admin: '/gestion',
+  supplier: '/supplier',
 };
 
 const adminRouteByTab = {
@@ -321,6 +323,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [adminSearch, setAdminSearchState] = useState(() => ({ ...initialAdminSearch }));
   const [adminProducts, setAdminProducts] = useState([]);
   const [adminSuppliers, setAdminSuppliers] = useState([]);
+  const [supplierProfile, setSupplierProfile] = useState(null);
+  const [supplierProducts, setSupplierProducts] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUserForm, setAdminUserForm] = useState(() => ({ ...initialAdminUserForm }));
   const [selectedAdminUserId, setSelectedAdminUserId] = useState('');
@@ -467,6 +471,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setSelectedAccountReviewId('');
       setAdminProducts([]);
       setAdminSuppliers([]);
+      setSupplierProfile(null);
+      setSupplierProducts([]);
       setAdminUsers([]);
       setAdminUserForm({ ...initialAdminUserForm });
       setSelectedAdminUserId('');
@@ -624,6 +630,21 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  async function loadSupplierPanel() {
+    if (session?.user?.role !== 'supplier') return;
+    try {
+      const [profile, products] = await Promise.all([
+        supplierModel.getProfile(request),
+        supplierModel.listProducts(request),
+      ]);
+      setSupplierProfile(profile);
+      setSupplierProducts(products);
+    } catch (error) {
+      setNotice(error.message);
+      setSupplierProducts([]);
+    }
+  }
+
   async function loadAdminUsers() {
     try {
       setAdminUsers(await adminModel.listUsers(request));
@@ -661,7 +682,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       if (authMode === 'login') {
         const next = await authModel.login(authForm.email, authForm.password);
         applySession(next);
-        setView(next.user?.role === 'admin' ? 'admin' : 'catalog');
+        setView(next.user?.role === 'admin' ? 'admin' : next.user?.role === 'supplier' ? 'supplier' : 'catalog');
         setNotice('Bienvenido, ' + (next.user?.name || 'cliente'));
       } else {
         if (!authForm.accountType) {
@@ -1746,6 +1767,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       selectedAdminSupplierId,
       selectedAdminSupplierKey,
       supplierForm,
+      supplierProducts,
+      supplierProfile,
       selectedAdminUser,
       selectedAdminUserId,
       selectedAdminUserOrders,
@@ -1827,6 +1850,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       resetHomeContent,
       saveHomeContentSettings,
       saveImageUrl,
+      loadSupplierPanel,
       submitProductReview,
       uploadProductImages,
       deleteOrder,

@@ -38,6 +38,7 @@ function readRoute(location) {
     '/pedidos': 'orders',
     '/cuenta': 'account',
     '/gestion': 'admin',
+    '/supplier': 'supplier',
   };
 
   return {

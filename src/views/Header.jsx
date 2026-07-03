@@ -1,4 +1,4 @@
-import { Heart, LogOut, Menu, PackageCheck, Search, Settings, ShoppingBag, UserRound, X } from 'lucide-react';
+import { Heart, LogOut, Menu, PackageCheck, PackagePlus, Search, Settings, ShoppingBag, UserRound, X } from 'lucide-react';
 import { useState } from 'react';
 
 const commerceSections = [
@@ -73,6 +73,9 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
                   {session.user?.role === 'admin' && (
                     <button type="button" onClick={() => goTo('admin')}><Settings size={16} /> Gestión</button>
                   )}
+                  {session.user?.role === 'supplier' && (
+                    <button type="button" onClick={() => goTo('supplier')}><PackagePlus size={16} /> Gestionar productos</button>
+                  )}
                   <button type="button" onClick={onLogout} disabled={busy}><LogOut size={16} /> Cerrar sesión</button>
                 </div>
               )}
@@ -120,6 +123,9 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
         <div className="mobile-access">
           <button type="button" onClick={() => goTo('account')}>Mi cuenta</button>
           <button type="button" onClick={() => goTo('orders')}>Mis pedidos</button>
+          {session?.user?.role === 'supplier' && (
+            <button type="button" onClick={() => goTo('supplier')}>Gestionar productos</button>
+          )}
           <button type="button" onClick={() => {
             onFavorites();
             setMenuOpen(false);

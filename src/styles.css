@@ -3574,3 +3574,138 @@ main {
   background: #eef7ed;
   color: #234f39;
 }
+
+.admin-sidebar nav button {
+  position: relative;
+}
+
+.admin-sidebar nav button span {
+  min-width: 0;
+}
+
+.nav-attention-badge {
+  display: inline-grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 999px;
+  background: #f5b841;
+  color: #3d2b13;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.supplier-detail-panel .checkbox-field {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.supplier-detail-panel .checkbox-field input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.supplier-detail-panel .supplier-form-actions {
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.supplier-detail-panel .supplier-danger-actions,
+.supplier-detail-panel .supplier-save-actions {
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.supplier-detail-panel .supplier-form-actions button {
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.supplier-detail-panel .destructive-action {
+  gap: 5px;
+}
+
+.supplier-panel-view {
+  display: grid;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.supplier-status-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  border: 1px solid rgba(49, 92, 69, 0.16);
+  border-radius: 10px;
+  background: #fffefa;
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+.supplier-status-banner > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  background: #234f39;
+  color: #ffffff;
+}
+
+.supplier-status-banner strong {
+  color: #1e2a22;
+  font-size: 18px;
+}
+
+.supplier-status-banner p,
+.supplier-status-banner small {
+  margin: 4px 0 0;
+  color: #697067;
+  line-height: 1.55;
+  font-weight: 750;
+}
+
+.supplier-status-banner.pending_review { border-color: rgba(181, 121, 23, 0.28); background: #fff9e8; }
+.supplier-status-banner.active { border-color: rgba(49, 92, 69, 0.24); background: #eef7ed; }
+.supplier-status-banner.rejected,
+.supplier-status-banner.inactive { border-color: rgba(159, 44, 31, 0.24); background: #fff0ed; }
+
+.supplier-own-products-panel .collection-row.with-thumb {
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+}
+
+.supplier-product-summary {
+  border: 0;
+  padding: 0;
+}
+
+.supplier-account-link {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.supplier-account-link p {
+  margin: 0;
+  color: #697067;
+  font-weight: 750;
+}

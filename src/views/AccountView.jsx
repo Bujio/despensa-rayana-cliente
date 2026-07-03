@@ -1,4 +1,4 @@
-import { ArrowLeft, MessageSquare, Save, Star, Store, Trash2, UserRound } from 'lucide-react';
+import { ArrowLeft, MessageSquare, PackagePlus, Save, Star, Store, Trash2, UserRound } from 'lucide-react';
 
 export function AccountView({ state, actions }) {
   const { accountReviewForm, authFeedback, authForm, authMode, busy, myReviews, selectedAccountReviewId, session } = state;
@@ -15,6 +15,16 @@ export function AccountView({ state, actions }) {
             <p>{session.user?.name || session.user?.email}</p>
           </div>
         </div>
+
+        {session.user?.role === 'supplier' && (
+          <section className="wide-panel supplier-account-link">
+            <div className="admin-panel-title"><PackagePlus size={19} /> Panel de proveedor</div>
+            <p>Accede a la gestión de tus productos y revisa el estado de tu solicitud.</p>
+            <button className="primary" type="button" onClick={() => actions.setView('supplier')}>
+              <PackagePlus size={18} /> Gestionar productos
+            </button>
+          </section>
+        )}
 
         <section className="wide-panel account-reviews-panel">
           <div className="admin-panel-title"><MessageSquare size={19} /> Mis opiniones</div>

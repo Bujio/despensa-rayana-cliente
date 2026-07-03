@@ -188,7 +188,7 @@ const adminNavigation = [
   ['settings', Settings, 'Configuración'],
 ];
 
-function AdminTabs({ active, actions, session }) {
+function AdminTabs({ active, actions, pendingSupplierCount = 0, session }) {
   return (
     <aside className="admin-sidebar" aria-label="Navegación de administración">
       <div className="admin-sidebar-brand">
@@ -198,7 +198,10 @@ function AdminTabs({ active, actions, session }) {
       <nav>
         {adminNavigation.map(([key, Icon, label]) => (
           <button className={active === key ? 'active' : ''} type="button" key={key} onClick={() => actions.openAdminTab(key)}>
-            <Icon size={18} /> {label}
+            <Icon size={18} /> <span>{label}</span>
+            {key === 'suppliers' && pendingSupplierCount > 0 && (
+              <strong className="nav-attention-badge">{pendingSupplierCount}</strong>
+            )}
           </button>
         ))}
       </nav>
@@ -429,10 +432,11 @@ export function AdminView({ state, actions }) {
     media: ['Imágenes', 'Gestiona imágenes asociadas a productos reales.'],
   };
   const [pageTitle, pageDescription] = adminPageMeta[adminTab] || adminPageMeta.dashboard;
+  const pendingSupplierCount = supplierRecords.filter((supplier) => supplier.status === 'pending_review').length;
 
   return (
     <section className="admin-view admin-shell">
-      <AdminTabs active={adminTab} actions={actions} session={session} />
+      <AdminTabs active={adminTab} actions={actions} pendingSupplierCount={pendingSupplierCount} session={session} />
       <main className="admin-main">
         <header className="admin-topbar">
           <button className="icon-button" type="button" aria-label="Contraer navegación"><PanelLeft size={18} /></button>
