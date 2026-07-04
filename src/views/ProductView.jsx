@@ -1,6 +1,6 @@
 import { ArrowLeft, BadgeCheck, Heart, MessageSquare, Minus, PackageSearch, Plus, ShieldCheck, ShoppingCart, Star, Truck } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { reviewModel } from '../models/reviewModel.js';
 import { ProductCard } from './ProductCard.jsx';
@@ -69,6 +69,9 @@ export function ProductView({ state, actions }) {
   const [selectedImage, setSelectedImage] = useState('');
   const [activeTab, setActiveTab] = useState('description');
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isDescriptionOverflowing, setIsDescriptionOverflowing] = useState(false);
+  const descriptionRef = useRef(null);
+  const selectedProductDescription = selectedProduct?.description || '';
 
   const gallery = useMemo(() => {
     return productModel.getImages(selectedProduct);
@@ -83,6 +86,34 @@ export function ProductView({ state, actions }) {
     setSelectedImage(gallery[0]?.url || '');
     setIsDescriptionExpanded(false);
   }, [gallery, selectedProduct?._id, selectedProduct?.id, selectedProduct?.sku]);
+
+  useEffect(() => {
+    const measureDescription = () => {
+      const container = descriptionRef.current;
+      if (!container || !selectedProductDescription) {
+        setIsDescriptionOverflowing(false);
+        return;
+      }
+
+      const content = container.querySelector('.rich-product-description') || container;
+      const styles = window.getComputedStyle(content);
+      const fontSize = Number.parseFloat(styles.fontSize) || 16;
+      const lineHeight = Number.parseFloat(styles.lineHeight) || fontSize * 1.7;
+      const maxLines = window.matchMedia('(max-width: 680px)').matches ? 5 : 10;
+      const collapsedHeight = lineHeight * maxLines;
+
+      container.style.setProperty('--description-collapsed-height', collapsedHeight + 'px');
+      setIsDescriptionOverflowing(content.scrollHeight > collapsedHeight + 4);
+    };
+
+    const frame = window.requestAnimationFrame(measureDescription);
+    window.addEventListener('resize', measureDescription);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', measureDescription);
+    };
+  }, [activeTab, selectedProduct?._id, selectedProduct?.id, selectedProduct?.sku, selectedProductDescription]);
 
   if (!selectedProduct) {
     return (
@@ -108,7 +139,7 @@ export function ProductView({ state, actions }) {
   const reviewSummary = reviewModel.getSummary(productReviews);
   const ownReview = productReviews.find((review) => String(review.user?._id || review.user?.id || review.user) === String(session?.user?.id || session?.user?._id));
   const shortDescription = selectedProduct.shortDescription || '';
-  const longDescription = selectedProduct.description || '';
+  const longDescription = selectedProductDescription;
   const selectedProductName = formatProductName(selectedProduct.name);
 
   const updateQuantity = (nextQuantity) => {
@@ -222,10 +253,13 @@ export function ProductView({ state, actions }) {
 
         {activeTab === 'description' && (
           <div className="tab-content">
-            <div className={'collapsible-description' + (isDescriptionExpanded ? ' expanded' : '')}>
+            <div
+              className={'collapsible-description' + (isDescriptionExpanded ? ' expanded' : '') + (!isDescriptionOverflowing ? ' not-collapsible' : '')}
+              ref={descriptionRef}
+            >
               <RichProductText content={longDescription} />
             </div>
-            {longDescription && (
+            {longDescription && isDescriptionOverflowing && (
               <button className="description-toggle-button" type="button" onClick={() => setIsDescriptionExpanded((value) => !value)}>
                 {isDescriptionExpanded ? <Minus size={17} /> : <Plus size={17} />}
                 {isDescriptionExpanded ? 'Ver menos' : 'Ver descripción completa'}
