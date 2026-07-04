@@ -20,6 +20,28 @@ function formatNoticeProductName(value) {
   return name.charAt(0).toLocaleUpperCase('es-ES') + name.slice(1);
 }
 
+function isInvalidSessionMessage(message) {
+  const value = String(message || '').toLowerCase();
+  return [
+    'invalid token',
+    'jwt expired',
+    'jwt malformed',
+    'invalid signature',
+    'token expired',
+  ].some((tokenMessage) => value.includes(tokenMessage));
+}
+
+function shouldShowSupplierLoginWelcome(user) {
+  if (user?.role !== 'supplier') return false;
+  const userKey = user._id || user.id || user.email;
+  if (!userKey || typeof window === 'undefined') return false;
+
+  const storageKey = 'despensa-supplier-welcome-seen:' + userKey;
+  if (window.localStorage.getItem(storageKey)) return false;
+  window.localStorage.setItem(storageKey, 'true');
+  return true;
+}
+
 function translateAuthMessage(message) {
   const value = String(message || '').toLowerCase();
   if (!value) return 'No se pudo completar la operación.';
@@ -352,7 +374,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [pagination, setPagination] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [notice, setNotice] = useState('');
+  const [notice, setNoticeState] = useState('');
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState(() => ({ ...initialAuthForm }));
   const [authFeedback, setAuthFeedback] = useState(null);
@@ -430,6 +452,16 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setSession(nextSession);
     if (nextSession) sessionModel.save(nextSession);
     else sessionModel.clear();
+  };
+
+  const setNotice = (message) => {
+    if (isInvalidSessionMessage(message)) {
+      setSession(null);
+      sessionModel.clear();
+      setNoticeState('');
+      return;
+    }
+    setNoticeState(message);
   };
 
   const request = (path, options) => apiRequest(path, options, session, applySession);
@@ -1004,7 +1036,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         const next = await authModel.login(authForm.email, authForm.password);
         applySession(next);
         setView(next.user?.role === 'admin' ? 'admin' : next.user?.role === 'supplier' ? 'supplier' : 'catalog');
-        setNotice('Hola, ' + (next.user?.name || 'cliente') + '. Todo listo en Mi cuenta.');
+        if (next.user?.role === 'supplier') {
+          if (shouldShowSupplierLoginWelcome(next.user)) {
+            setNotice('Hola, ' + (next.user?.name || 'proveedor') + '. Ya tienes tu panel de proveedor preparado.');
+          }
+        } else {
+          setNotice('Hola, ' + (next.user?.name || 'cliente') + '. Todo listo en Mi cuenta.');
+        }
       } else {
         if (!authForm.accountType) {
           setAuthFeedback({ type: 'error', message: 'Elige si quieres darte de alta como cliente o proveedor.' });

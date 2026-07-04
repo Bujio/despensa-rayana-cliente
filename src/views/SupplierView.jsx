@@ -18,6 +18,7 @@ import {
   Store,
   Trash2,
   UserRound,
+  X,
 } from 'lucide-react';
 import { productModel } from '../models/productModel.js';
 import { formatCurrency, formatProductName } from './viewFormatters.js';
@@ -121,6 +122,24 @@ function getSupplierMessage(status) {
   if (status === 'rejected') return 'Tu solicitud no ha sido aprobada. Puedes revisar la información y contactar con La Despensa Rayana.';
   if (status === 'inactive') return 'Tu cuenta de proveedor está inactiva temporalmente. No puedes crear productos nuevos.';
   return 'Tu perfil está pendiente de revisión. Puedes completar tu información y preparar productos, pero no serán visibles hasta la aprobación.';
+}
+
+function getSupplierStatusNoticeKey(profile, sessionUser, status) {
+  const supplierKey = profile?._id || profile?.id || profile?.supplierCode || sessionUser?._id || sessionUser?.id || sessionUser?.email;
+  if (!supplierKey) return '';
+  return 'despensa-supplier-status-notice-seen:' + supplierKey + ':' + status;
+}
+
+function hasSeenSupplierStatusNotice(profile, sessionUser, status) {
+  if (typeof window === 'undefined') return false;
+  const key = getSupplierStatusNoticeKey(profile, sessionUser, status);
+  return Boolean(key && window.localStorage.getItem(key));
+}
+
+function markSupplierStatusNoticeSeen(profile, sessionUser, status) {
+  if (typeof window === 'undefined') return;
+  const key = getSupplierStatusNoticeKey(profile, sessionUser, status);
+  if (key) window.localStorage.setItem(key, 'true');
 }
 
 function getProductStatusLabel(status) {
@@ -484,9 +503,27 @@ function SupplierDashboard({ state, actions }) {
   const productReport = state.supplierReports.products || {};
   const salesReport = state.supplierReports.sales || {};
   const products = state.supplierProducts || [];
+  const [showStatusNotice, setShowStatusNotice] = useState(() => !hasSeenSupplierStatusNotice(state.supplierProfile, state.session?.user, status));
   const pending = products.filter((product) => product.status === 'pending_review').length;
   const active = products.filter((product) => product.status === 'published').length;
   const out = products.filter((product) => Number(product.stock || 0) === 0).length;
+
+  useEffect(() => {
+    setShowStatusNotice(!hasSeenSupplierStatusNotice(state.supplierProfile, state.session?.user, status));
+  }, [
+    state.supplierProfile?._id,
+    state.supplierProfile?.id,
+    state.supplierProfile?.supplierCode,
+    state.session?.user?._id,
+    state.session?.user?.id,
+    state.session?.user?.email,
+    status,
+  ]);
+
+  const dismissStatusNotice = () => {
+    markSupplierStatusNoticeSeen(state.supplierProfile, state.session?.user, status);
+    setShowStatusNotice(false);
+  };
 
   return (
     <div className="supplier-panel-view">
@@ -497,14 +534,19 @@ function SupplierDashboard({ state, actions }) {
         </div>
         <button className="secondary" type="button" onClick={actions.loadSupplierPanel} disabled={state.busy}><RefreshCw size={17} /> Actualizar</button>
       </div>
-      <section className={'supplier-status-banner ' + status}>
-        <span><ShieldCheck size={22} /></span>
-        <div>
-          <strong>{getSupplierStatusLabel(status)}</strong>
-          <p>{getSupplierMessage(status)}</p>
-          {state.supplierProfile?.supplierCode && <small>Código de proveedor: {state.supplierProfile.supplierCode}</small>}
-        </div>
-      </section>
+      {showStatusNotice && (
+        <section className={'supplier-status-banner ' + status}>
+          <span><ShieldCheck size={22} /></span>
+          <div>
+            <strong>{getSupplierStatusLabel(status)}</strong>
+            <p>{getSupplierMessage(status)}</p>
+            {state.supplierProfile?.supplierCode && <small>Código de proveedor: {state.supplierProfile.supplierCode}</small>}
+          </div>
+          <button className="icon-button" type="button" onClick={dismissStatusNotice} title="No volver a mostrar este aviso">
+            <X size={16} />
+          </button>
+        </section>
+      )}
       <div className="supplier-kpi-grid">
         <article><span>Mis productos</span><strong>{products.length}</strong></article>
         <article><span>Activos</span><strong>{productReport.activeProducts ?? active}</strong></article>

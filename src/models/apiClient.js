@@ -61,6 +61,7 @@ export async function apiRequest(path, options = {}, session = sessionModel.get(
       onSessionChange?.(refreshed);
       return apiRequest(path, options, refreshed, onSessionChange);
     }
+    onSessionChange?.(null);
   }
 
   const payload = await readJson(response);
