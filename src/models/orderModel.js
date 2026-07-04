@@ -34,6 +34,12 @@ export const orderModel = {
   delete(request, orderId) {
     return request('/orders/' + orderId, { method: 'DELETE' });
   },
+  cancel(request, orderId, reason = '') {
+    return request('/orders/' + orderId + '/cancel', {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  },
   getTotal(order) {
     return order.total || order.products?.reduce((sum, item) => sum + item.price * item.count, 0) || 0;
   },

@@ -1,7 +1,7 @@
 import { Heart, PackageSearch, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
 import { productModel } from '../models/productModel.js';
-import { formatCurrency } from './viewFormatters.js';
+import { formatCurrency, formatProductName } from './viewFormatters.js';
 
 function stripRichText(value) {
   return String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -17,6 +17,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
   const hasPriceOffer = offerLabel && offerPrice < Number(product?.price || 0);
   const supplierName = product?.supplier?.name || 'La Despensa Rayana';
   const cardDescription = stripRichText(product?.shortDescription);
+  const productName = formatProductName(product?.name);
 
   const openProduct = (event) => {
     if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
@@ -31,11 +32,11 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
       onKeyDown={openProduct}
       role="link"
       tabIndex={0}
-      aria-label={'Ver producto ' + product.name}
+      aria-label={'Ver producto ' + productName}
     >
       <div className="product-media">
         {image && !imageFailed ? (
-          <img src={image} alt={product.name} loading="lazy" onError={() => setImageFailed(true)} />
+          <img src={image} alt={productName} loading="lazy" onError={() => setImageFailed(true)} />
         ) : (
           <PackageSearch size={44} />
         )}
@@ -44,7 +45,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
           className={'favorite-button' + (isFavorite ? ' active' : '')}
           type="button"
           title={isFavorite ? 'Quitar favorito' : 'Guardar favorito'}
-          aria-label={(isFavorite ? 'Quitar ' : 'Guardar ') + product.name + ' como favorito'}
+          aria-label={(isFavorite ? 'Quitar ' : 'Guardar ') + productName + ' como favorito'}
           onClick={(event) => {
             event.stopPropagation();
             onToggleFavorite?.(product);
@@ -59,7 +60,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
       <div className="product-body">
         <div>
           <p className="product-supplier">{supplierName}</p>
-          <h2>{product.name}</h2>
+          <h2>{productName}</h2>
           {cardDescription && <p>{cardDescription}</p>}
         </div>
 
@@ -77,7 +78,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
             className="quick-add-button"
             type="button"
             title={availableStock > 0 ? 'Añadir a la cesta' : 'Agotado'}
-            aria-label={availableStock > 0 ? 'Añadir ' + product.name + ' a la cesta' : product.name + ' agotado'}
+            aria-label={availableStock > 0 ? 'Añadir ' + productName + ' a la cesta' : productName + ' agotado'}
             onClick={(event) => {
               event.stopPropagation();
               onAdd?.(product);

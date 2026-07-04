@@ -4,6 +4,7 @@ import {
   Bold,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   Eye,
   FileText,
   Heading2,
@@ -39,7 +40,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { orderModel } from '../models/orderModel.js';
-import { formatCurrency } from './viewFormatters.js';
+import { formatCurrency, formatProductName } from './viewFormatters.js';
 
 function getId(item) {
   return item?._id || item?.id || '';
@@ -106,7 +107,7 @@ function getProductStatus(product) {
 }
 
 function getSupplierKey(supplier) {
-  return String(supplier?.id ?? supplier?.name ?? '').trim();
+  return String(supplier?._id ?? supplier?.id ?? supplier?.supplierCode ?? supplier?.name ?? '').trim();
 }
 
 function AdminBadge({ tone = 'neutral', children }) {
@@ -385,6 +386,8 @@ export function AdminView({ state, actions }) {
     ...supplier,
     key: getSupplierKey(supplier),
     products: Array.isArray(supplier.products) ? supplier.products : [],
+    pendingProductCount: supplier.pendingProductCount
+      ?? (Array.isArray(supplier.products) ? supplier.products.filter((product) => product.status === 'pending_review').length : 0),
   })).sort((first, second) => (first.name || '').localeCompare(second.name || '', 'es'));
 
   const filteredSuppliers = supplierRecords.filter((supplier) => includesSearch([
@@ -398,6 +401,7 @@ export function AdminView({ state, actions }) {
   ], adminSearch.suppliers));
 
   const selectedAdminSupplier = supplierRecords.find((supplier) => (supplier._id || supplier.id) === selectedAdminSupplierId) || null;
+  const selectedProductUsesSupplierRef = Boolean(selectedAdminProductId && productForm.supplierId && !Number.isFinite(Number(productForm.supplierId)));
 
   const filteredMediaProducts = adminProducts.filter((product) => includesSearch([
     product.name,
@@ -412,7 +416,12 @@ export function AdminView({ state, actions }) {
   const activeOffers = adminProducts.filter((product) => productModel.getOfferLabel(product));
   const todayKey = new Date().toISOString().slice(0, 10);
   const todayOrders = orders.filter((order) => String(order.createdAt || order.date || '').slice(0, 10) === todayKey);
-  const todaySales = todayOrders.reduce((total, order) => total + orderModel.getTotal(order), 0);
+  const validSalesOrders = orders.filter((order) => order.status !== 'cancelled');
+  const cancelledOrders = orders.filter((order) => order.status === 'cancelled');
+  const totalSales = validSalesOrders.reduce((total, order) => total + orderModel.getTotal(order), 0);
+  const totalCancellations = cancelledOrders.reduce((total, order) => total + orderModel.getTotal(order), 0);
+  const totalRefunds = cancelledOrders.reduce((total, order) => total + Number(order.refund?.amount || order.cancellation?.amount || orderModel.getTotal(order)), 0);
+  const todaySales = todayOrders.filter((order) => order.status !== 'cancelled').reduce((total, order) => total + orderModel.getTotal(order), 0);
   const recentOrders = [...orders].sort((first, second) => new Date(second.createdAt || second.date || 0) - new Date(first.createdAt || first.date || 0)).slice(0, 5);
 
   const adminPageMeta = {
@@ -433,10 +442,12 @@ export function AdminView({ state, actions }) {
   };
   const [pageTitle, pageDescription] = adminPageMeta[adminTab] || adminPageMeta.dashboard;
   const pendingSupplierCount = supplierRecords.filter((supplier) => supplier.status === 'pending_review').length;
+  const suppliersWithPendingProducts = supplierRecords.filter((supplier) => Number(supplier.pendingProductCount || 0) > 0).length;
+  const supplierAttentionCount = pendingSupplierCount + suppliersWithPendingProducts;
 
   return (
     <section className="admin-view admin-shell">
-      <AdminTabs active={adminTab} actions={actions} pendingSupplierCount={pendingSupplierCount} session={session} />
+      <AdminTabs active={adminTab} actions={actions} pendingSupplierCount={supplierAttentionCount} session={session} />
       <main className="admin-main">
         <header className="admin-topbar">
           <button className="icon-button" type="button" aria-label="Contraer navegación"><PanelLeft size={18} /></button>
@@ -530,7 +541,7 @@ export function AdminView({ state, actions }) {
                         {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
                       </span>
                       <span>
-                        <strong>{product.name}</strong>
+                        <strong>{formatProductName(product.name)}</strong>
                         <small>{product.sku} · {formatCurrency(product.price)}</small>
                       </span>
                     </label>
@@ -643,7 +654,7 @@ export function AdminView({ state, actions }) {
                             {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
                           </span>
                           <span>
-                            <strong>{product.name}</strong>
+                            <strong>{formatProductName(product.name)}</strong>
                             <small>{product.sku} · {formatCurrency(product.price)}</small>
                           </span>
                         </label>
@@ -835,20 +846,32 @@ export function AdminView({ state, actions }) {
             <div className="admin-list">
               {paginatedProducts.map((product) => {
                 const productId = getId(product);
-                const offerLabel = productModel.getOfferLabel(product);
+                  const offerLabel = productModel.getOfferLabel(product);
+                  const [statusLabel, statusTone] = getProductStatus(product);
                 const image = productModel.getImage(product);
                 return (
-                  <article className={'collection-row with-thumb' + (selectedAdminProductId === productId ? ' active' : '')} key={productId}>
+                  <article className={'admin-product-row' + (selectedAdminProductId === productId ? ' active' : '')} key={productId}>
                     <div className="admin-thumb">
-                      {image ? <img src={image} alt={product.name} /> : <PackagePlus size={22} />}
+                      {image ? <img src={image} alt={formatProductName(product.name)} /> : <PackagePlus size={22} />}
                     </div>
-                    <button className="user-main" type="button" onClick={() => actions.selectAdminProduct(product)}>
-                      <strong>{product.name}</strong>
+                    <button className="user-main admin-product-main" type="button" onClick={() => actions.selectAdminProduct(product)}>
+                      <strong>{formatProductName(product.name)}</strong>
                       <span>{product.sku} · {formatCurrency(product.price)} · {product.stock} uds.</span>
                     </button>
-                    {offerLabel && <span className="offer-pill">{offerLabel}</span>}
-                    <button className="icon-button" type="button" onClick={() => actions.selectAdminProduct(product)} title="Editar producto"><Eye size={17} /></button>
-                    <button className="icon-button danger-button" type="button" onClick={() => actions.deleteProduct(product)} disabled={busy} title="Eliminar producto"><Trash2 size={17} /></button>
+                    <div className="admin-product-meta">
+                      <AdminBadge tone={statusTone}>{statusLabel}</AdminBadge>
+                      {offerLabel && <span className="offer-pill">{offerLabel}</span>}
+                    </div>
+                    <div className="admin-product-actions">
+                      {product.status === 'pending_review' && (
+                        <>
+                          <button className="primary mini-button approve-product-button" type="button" onClick={() => actions.approveAdminProduct(product)} disabled={busy}>Aprobar</button>
+                          <button className="secondary mini-button reject-product-button" type="button" onClick={() => actions.rejectAdminProduct(product)} disabled={busy}>Rechazar</button>
+                        </>
+                      )}
+                      <button className="icon-button" type="button" onClick={() => actions.selectAdminProduct(product)} title="Editar producto"><Eye size={17} /></button>
+                      <button className="icon-button danger-button" type="button" onClick={() => actions.deleteProduct(product)} disabled={busy} title="Eliminar producto"><Trash2 size={17} /></button>
+                    </div>
                   </article>
                 );
               })}
@@ -884,20 +907,23 @@ export function AdminView({ state, actions }) {
             <div className="admin-panel-title"><PackagePlus size={19} /> {selectedAdminProductId ? 'Editar producto' : 'Nuevo producto'}</div>
             <div className="admin-form-grid">
               <label>Nombre<input required value={productForm.name} onChange={updateProduct('name')} placeholder="Ej. Miel Villuercas-Ibores" /></label>
-              <label>SKU<input required value={productForm.sku} onChange={updateProduct('sku')} placeholder="EXT-MIE-NUEVA-500" /></label>
+              <label>SKU<input value={productForm.sku} onChange={updateProduct('sku')} placeholder="Se genera automáticamente: LDR-CAT-PROV-PROD-XXXX" /></label>
               <label>Precio<input required type="number" min="0.01" step="0.01" value={productForm.price} onChange={updateProduct('price')} /></label>
               <label>Stock<input required type="number" min="0" step="1" value={productForm.stock} onChange={updateProduct('stock')} /></label>
               <label>
                 Categoría
-                <select value={productForm.category} onChange={updateProduct('category')}>
+                <select required value={productForm.category} onChange={updateProduct('category')}>
                   <option value="">Sin categoría</option>
                   {categories.map((category) => (
                     <option key={getId(category)} value={getId(category)}>{category.name}</option>
                   ))}
                 </select>
               </label>
-              <label>ID proveedor<input required type="number" min="0" step="1" value={productForm.supplierId} onChange={updateProduct('supplierId')} /></label>
-              <label className="wide-field">Proveedor<input value={productForm.supplierName} onChange={updateProduct('supplierName')} placeholder="Ej. Cooperativa local" /></label>
+              <label>
+                ID proveedor
+                <input required value={productForm.supplierId} onChange={updateProduct('supplierId')} readOnly={selectedProductUsesSupplierRef} />
+              </label>
+              <label className="wide-field">Proveedor<input value={productForm.supplierName} onChange={updateProduct('supplierName')} readOnly={selectedProductUsesSupplierRef} placeholder="Ej. Cooperativa local" /></label>
               <div className="wide-field rich-description-editor compact-rich-editor">
                 <div className="rich-editor-header">
                   <span>Descripción corta</span>
@@ -910,7 +936,7 @@ export function AdminView({ state, actions }) {
                     <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'list')} title="Lista"><List size={16} /></button>
                   </div>
                 </div>
-                <textarea ref={shortDescriptionRef} value={productForm.shortDescription} onChange={updateProduct('shortDescription')} placeholder="Resumen breve que aparece junto a la valoración y antes del precio. Si se deja vacío, no se mostrará texto corto." />
+                <textarea required ref={shortDescriptionRef} value={productForm.shortDescription} onChange={updateProduct('shortDescription')} placeholder="Resumen breve obligatorio que aparece junto a la valoración y antes del precio." />
               </div>
               <div className="wide-field rich-description-editor">
                 <div className="rich-editor-header">
@@ -1122,7 +1148,7 @@ export function AdminView({ state, actions }) {
               {filteredReviews.length ? filteredReviews.map((review) => (
                 <article className="collection-row" key={review._id || review.id}>
                   <button className="user-main" type="button">
-                    <strong>{review.product?.name || 'Producto'}</strong>
+                    <strong>{formatProductName(review.product?.name) || 'Producto'}</strong>
                     <span>{review.user?.email || review.user?.name || 'Cliente'} · {review.rating}/5 · {review.title || review.comment}</span>
                   </button>
                   <button className="icon-button danger-button" type="button" onClick={() => actions.deleteReview(review)} disabled={busy} title="Eliminar opinión">
@@ -1148,12 +1174,17 @@ export function AdminView({ state, actions }) {
             </label>
             <div className="admin-list">
               {filteredSuppliers.length ? filteredSuppliers.map((supplier) => (
-                <article className={'collection-row' + (selectedAdminSupplierId === (supplier._id || supplier.id) ? ' active' : '')} key={supplier._id || supplier.id || supplier.key}>
+                <article className={'collection-row supplier-list-row' + (selectedAdminSupplierId === (supplier._id || supplier.id) ? ' active' : '')} key={supplier._id || supplier.id || supplier.key}>
                   <button className="user-main" type="button" onClick={() => actions.selectAdminSupplier(supplier)}>
                     <strong>{supplier.name || 'Proveedor sin nombre'}</strong>
                     <span>{supplier.supplierCode || 'sin código'} · {supplier.productCount ?? supplier.products.length} productos · {supplier.email || 'sin email'}</span>
                   </button>
-                  <AdminBadge tone={getSupplierStatusTone(supplier.status)}>{getSupplierStatusLabel(supplier.status)}</AdminBadge>
+                  <div className="supplier-row-badges">
+                    {Number(supplier.pendingProductCount || 0) > 0 && (
+                      <AdminBadge tone="warning">{supplier.pendingProductCount} productos pendientes</AdminBadge>
+                    )}
+                    <AdminBadge tone={getSupplierStatusTone(supplier.status)}>{getSupplierStatusLabel(supplier.status)}</AdminBadge>
+                  </div>
                 </article>
               )) : (
                 <div className="empty-state compact-empty">No hay proveedores para mostrar.</div>
@@ -1180,10 +1211,17 @@ export function AdminView({ state, actions }) {
                   <strong>{selectedAdminSupplier.productCount ?? selectedAdminSupplier.products.length}</strong>
                   <span>productos asociados a este proveedor</span>
                 </div>
+                {Number(selectedAdminSupplier.pendingProductCount || 0) > 0 && (
+                  <div className="wide-field supplier-pending-alert">
+                    <Bell size={18} />
+                    <span>Este proveedor tiene {selectedAdminSupplier.pendingProductCount} productos pendientes de revisión.</span>
+                  </div>
+                )}
                 <div className="form-actions supplier-form-actions wide-field">
                   <div className="supplier-danger-actions">
                     <button className="danger-button destructive-action" type="button" onClick={() => actions.setAdminSupplierAction('reject')} disabled={busy || selectedAdminSupplier.status === 'rejected'}><Trash2 size={16} /> Rechazar</button>
                     <button className="secondary" type="button" onClick={() => actions.setAdminSupplierAction('deactivate')} disabled={busy || selectedAdminSupplier.status === 'inactive'}>Desactivar</button>
+                    <button className="danger-button destructive-action" type="button" onClick={() => window.confirm('¿Eliminar este proveedor de la base de datos? Sus productos quedarán inactivos.') && actions.deleteAdminSupplier()} disabled={busy}><Trash2 size={16} /> Eliminar DB</button>
                   </div>
                   <div className="supplier-save-actions">
                     <button className="secondary" type="button" onClick={actions.resetSupplierForm}>Cancelar</button>
@@ -1209,7 +1247,7 @@ export function AdminView({ state, actions }) {
                     <article className="collection-row with-thumb" key={getId(product) || product.sku}>
                       <div className="admin-thumb">{image ? <img src={image} alt="" /> : <ShoppingBag size={18} />}</div>
                       <button className="user-main" type="button" onClick={() => { actions.openAdminTab('products'); actions.selectAdminProduct(product); }}>
-                        <strong>{product.name}</strong>
+                        <strong>{formatProductName(product.name)}</strong>
                         <span>{product.sku} · {formatCurrency(product.price)} · Stock {product.stock ?? 0} · {product.status || 'published'}</span>
                       </button>
                       <AdminBadge tone={statusTone}>{statusLabel}</AdminBadge>
@@ -1230,7 +1268,7 @@ export function AdminView({ state, actions }) {
             {activeOffers.length ? activeOffers.map((product) => (
               <article className="collection-row with-thumb" key={getId(product)}>
                 <div className="admin-thumb">{productModel.getImage(product) ? <img src={productModel.getImage(product)} alt="" /> : <Percent size={20} />}</div>
-                <button className="user-main" type="button" onClick={() => actions.selectAdminProduct(product)}><strong>{product.name}</strong><span>{product.sku} · {productModel.getOfferLabel(product)}</span></button>
+                <button className="user-main" type="button" onClick={() => actions.selectAdminProduct(product)}><strong>{formatProductName(product.name)}</strong><span>{product.sku} · {productModel.getOfferLabel(product)}</span></button>
                 <AdminBadge tone="success">Activa</AdminBadge>
               </article>
             )) : <div className="empty-state compact-empty">No hay ofertas activas.</div>}
@@ -1253,8 +1291,10 @@ export function AdminView({ state, actions }) {
       {adminTab === 'reports' && (
         <AdminPlaceholderSection icon={BarChart3} title="Informes" description="Analítica básica calculada con pedidos y catálogo disponibles.">
           <div className="admin-report-grid">
-            <AdminStatCard icon={BarChart3} label="Ingresos" value={formatCurrency(orders.reduce((total, order) => total + orderModel.getTotal(order), 0))} />
-            <AdminStatCard icon={ShoppingBag} label="Pedidos" value={orders.length} />
+            <AdminStatCard icon={BarChart3} label="Ingresos netos" value={formatCurrency(totalSales)} />
+            <AdminStatCard icon={ShoppingBag} label="Pedidos activos" value={validSalesOrders.length} />
+            <AdminStatCard icon={Trash2} label="Anulaciones" value={formatCurrency(totalCancellations)} />
+            <AdminStatCard icon={CreditCard} label="Abonos" value={formatCurrency(totalRefunds)} />
             <AdminStatCard icon={PackagePlus} label="Productos" value={adminProducts.length} />
             <AdminStatCard icon={Tags} label="Categorías" value={categories.length} />
           </div>
@@ -1285,7 +1325,7 @@ export function AdminView({ state, actions }) {
               <select required value={imageForm.productId} onChange={updateImage('productId')}>
                 <option value="">Selecciona un producto</option>
                 {filteredMediaProducts.map((product) => (
-                  <option key={getId(product)} value={getId(product)}>{product.name} · {product.sku}</option>
+                  <option key={getId(product)} value={getId(product)}>{formatProductName(product.name)} · {product.sku}</option>
                 ))}
               </select>
             </label>

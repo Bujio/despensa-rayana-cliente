@@ -1,19 +1,24 @@
 function buildProductPayload(form) {
   const payload = {
     name: form.name.trim(),
-    sku: form.sku.trim(),
     price: Number(form.price),
     shortDescription: form.shortDescription.trim(),
     description: form.description.trim(),
     stock: Number(form.stock),
-    supplier: {
-      id: Number(form.supplierId),
-    },
   };
+  const numericSupplierId = Number(form.supplierId);
+  const hasLegacySupplierId = Number.isInteger(numericSupplierId) && numericSupplierId >= 0;
 
+  if (hasLegacySupplierId) {
+    payload.supplier = {
+      id: numericSupplierId,
+    };
+  }
+
+  if (form.sku.trim()) payload.sku = form.sku.trim();
   if (form.category) payload.category = form.category;
-  if (form.supplierName.trim()) payload.supplier.name = form.supplierName.trim();
-  if (Array.isArray(form.supplierImages)) payload.supplier.images = form.supplierImages;
+  if (payload.supplier && form.supplierName.trim()) payload.supplier.name = form.supplierName.trim();
+  if (payload.supplier && Array.isArray(form.supplierImages)) payload.supplier.images = form.supplierImages;
   if (Array.isArray(form.images)) {
     payload.images = form.images
       .filter((image) => image?.url?.trim())
@@ -82,6 +87,10 @@ export const adminModel = {
 
   deactivateSupplier(request, supplierId) {
     return request('/suppliers/' + supplierId + '/deactivate', { method: 'PATCH' });
+  },
+
+  deleteSupplier(request, supplierId) {
+    return request('/suppliers/' + supplierId, { method: 'DELETE' });
   },
 
   reactivateSupplier(request, supplierId) {
@@ -172,6 +181,17 @@ export const adminModel = {
     return request('/products/' + productId, {
       method: 'PATCH',
       body: JSON.stringify(buildProductPayload(form)),
+    });
+  },
+
+  approveProduct(request, productId) {
+    return request('/products/' + productId + '/approve', { method: 'PATCH' });
+  },
+
+  rejectProduct(request, productId, reason) {
+    return request('/products/' + productId + '/reject', {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
     });
   },
 

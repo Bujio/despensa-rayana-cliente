@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import { useEffect, useMemo, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { reviewModel } from '../models/reviewModel.js';
-import { formatCurrency } from './viewFormatters.js';
+import { formatCurrency, formatProductName } from './viewFormatters.js';
 
 function sanitizeRichDescription(value) {
   const raw = String(value || '').trim();
@@ -62,6 +62,7 @@ export function ProductView({ state, actions }) {
   const ownReview = productReviews.find((review) => String(review.user?._id || review.user?.id || review.user) === String(session?.user?.id || session?.user?._id));
   const shortDescription = selectedProduct.shortDescription || '';
   const longDescription = selectedProduct.description || '';
+  const selectedProductName = formatProductName(selectedProduct.name);
 
   const updateQuantity = (nextQuantity) => {
     setQuantity(Math.min(Math.max(nextQuantity, 1), Math.max(availableStock, 1)));
@@ -84,7 +85,7 @@ export function ProductView({ state, actions }) {
                 }}>
                   <img
                     src={item.url}
-                    alt={item.name || selectedProduct.name}
+                    alt={formatProductName(item.name) || selectedProductName}
                     onError={(event) => {
                       event.currentTarget.hidden = true;
                     }}
@@ -95,7 +96,7 @@ export function ProductView({ state, actions }) {
           )}
           <div className="product-detail-media">
             {image && !imageFailed ? (
-              <img src={image} alt={selectedProduct.name} onError={() => setImageFailed(true)} />
+              <img src={image} alt={selectedProductName} onError={() => setImageFailed(true)} />
             ) : (
               <PackageSearch size={64} />
             )}
@@ -106,7 +107,7 @@ export function ProductView({ state, actions }) {
         <article className="product-detail-body">
           <div className="product-detail-kicker">{selectedProduct.sku}</div>
           <div className="detail-title-row">
-            <h1>{selectedProduct.name}</h1>
+            <h1>{selectedProductName}</h1>
             <button
               className={'favorite-button detail-favorite' + (isFavorite ? ' active' : '')}
               type="button"

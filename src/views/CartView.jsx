@@ -1,5 +1,5 @@
 import { CreditCard, MapPin, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
-import { formatCurrency } from './viewFormatters.js';
+import { formatCurrency, formatProductName } from './viewFormatters.js';
 
 function FieldError({ message }) {
   if (!message) return null;
@@ -66,7 +66,7 @@ export function CartView({ state, actions }) {
               {cartItems.map((item) => (
                 <article className="cart-row" key={item.sku}>
                   <div>
-                    <h2>{item.name || item.sku}</h2>
+                    <h2>{formatProductName(item.name) || item.sku}</h2>
                     <p>{item.sku}</p>
                   </div>
                   <strong>{formatCurrency(item.price)}</strong>

@@ -1,9 +1,8 @@
-import { API_URL } from './apiClient.js';
+import { API_URL, apiRequest } from './apiClient.js';
 
 function buildSupplierProductPayload(form) {
   const payload = {
     name: form.name.trim(),
-    sku: form.sku.trim(),
     price: Number(form.price),
     shortDescription: form.shortDescription.trim(),
     description: form.description.trim(),
@@ -11,6 +10,7 @@ function buildSupplierProductPayload(form) {
     status: form.status === 'draft' ? 'draft' : 'pending_review',
   };
 
+  if (form.sku.trim()) payload.sku = form.sku.trim();
   if (form.category) payload.category = form.category;
   if (Array.isArray(form.images)) {
     payload.images = form.images
@@ -102,6 +102,24 @@ export const supplierModel = {
       method: 'POST',
       body: formData,
     });
+  },
+
+  uploadProfileLogo(session, file) {
+    const formData = new FormData();
+    formData.append('images', file);
+    return apiRequest('/suppliers/me/logo', { method: 'POST', body: formData }, session);
+  },
+
+  uploadProfileMainImage(session, file) {
+    const formData = new FormData();
+    formData.append('images', file);
+    return apiRequest('/suppliers/me/main-image', { method: 'POST', body: formData }, session);
+  },
+
+  uploadProfileGallery(session, files) {
+    const formData = new FormData();
+    files.slice(0, 5).forEach((file) => formData.append('images', file));
+    return apiRequest('/suppliers/me/images', { method: 'POST', body: formData }, session);
   },
 
   async getSalesReport(request) {

@@ -11,8 +11,14 @@ import { homeContentModel } from '../models/homeContentModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { sessionModel } from '../models/sessionModel.js';
 import { supplierModel } from '../models/supplierModel.js';
+import { userModel } from '../models/userModel.js';
 import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
 
+function formatNoticeProductName(value) {
+  const name = String(value || '').trim();
+  if (!name) return '';
+  return name.charAt(0).toLocaleUpperCase('es-ES') + name.slice(1);
+}
 
 function translateAuthMessage(message) {
   const value = String(message || '').toLowerCase();
@@ -132,6 +138,17 @@ const initialAdminUserForm = {
   password: '',
 };
 
+const initialAccountProfileForm = {
+  name: '',
+  email: '',
+  phone: '',
+  street: '',
+  codePostal: '',
+  city: '',
+  country: '',
+  password: '',
+};
+
 const initialPaymentForm = {
   holder: '',
   cardNumber: '',
@@ -145,6 +162,17 @@ const getShippingDefaults = (session) => ({
   city: session?.user?.address?.city || '',
   country: session?.user?.address?.country || 'España',
   phone: session?.user?.phone || '',
+});
+
+const getAccountProfileDefaults = (session) => ({
+  name: session?.user?.name || '',
+  email: session?.user?.email || '',
+  phone: session?.user?.phone || '',
+  street: session?.user?.address?.street || '',
+  codePostal: session?.user?.address?.codePostal || '',
+  city: session?.user?.address?.city || '',
+  country: session?.user?.address?.country || 'España',
+  password: '',
 });
 
 const validateShippingForm = (form) => {
@@ -183,6 +211,9 @@ const getSupplierKey = (supplier) => String(supplier?._id || supplier?.id || sup
 function getProductFormFromProduct(product, supplierOverride = null) {
   const offer = product?.offer || {};
   const supplier = supplierOverride || product?.supplier || {};
+  const supplierRef = typeof product?.supplierRef === 'object'
+    ? product.supplierRef?._id || product.supplierRef?.id || ''
+    : product?.supplierRef || '';
 
   return {
     name: product?.name || '',
@@ -192,8 +223,8 @@ function getProductFormFromProduct(product, supplierOverride = null) {
     description: product?.description || '',
     stock: product?.stock ?? '0',
     category: typeof product?.category === 'object' ? product.category?._id || product.category?.id || '' : product?.category || '',
-    supplierId: supplier.id ?? '0',
-    supplierName: supplier.name || '',
+    supplierId: supplierRef || supplier.supplierCode || supplier.id || '0',
+    supplierName: supplier.name || product?.supplierRef?.name || '',
     supplierImages: Array.isArray(supplier.images) ? supplier.images : [],
     images: Array.isArray(product?.images) ? product.images : [],
     status: product?.status || 'pending_review',
@@ -214,6 +245,7 @@ const routeByView = {
   story: '/la-rayana',
   orders: '/pedidos',
   account: '/cuenta',
+  accountRegister: '/cuenta/registro',
   admin: '/gestion',
   supplier: '/supplier',
   supplierRegister: '/supplier/register',
@@ -308,6 +340,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [adminReviews, setAdminReviews] = useState([]);
   const [reviewForm, setReviewForm] = useState(() => ({ ...emptyReviewForm }));
   const [accountReviewForm, setAccountReviewForm] = useState(() => ({ ...emptyReviewForm }));
+  const [accountProfileForm, setAccountProfileForm] = useState(() => ({ ...initialAccountProfileForm }));
   const [selectedAccountReviewId, setSelectedAccountReviewId] = useState('');
   const [loadingProductDetail, setLoadingProductDetail] = useState(false);
   const [categories, setCategories] = useState([]);
@@ -458,6 +491,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   useEffect(() => {
     if (session) {
+      setAccountProfileForm(getAccountProfileDefaults(session));
       setShippingForm(getShippingDefaults(session));
       loadCart();
       loadOrders();
@@ -478,6 +512,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAdminReviews([]);
       setReviewForm({ ...emptyReviewForm });
       setAccountReviewForm({ ...emptyReviewForm });
+      setAccountProfileForm({ ...initialAccountProfileForm });
       setSelectedAccountReviewId('');
       setAdminProducts([]);
       setAdminSuppliers([]);
@@ -679,11 +714,18 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
-  async function registerSupplierProfile(form) {
+  async function registerSupplierProfile(form, media = {}) {
     setBusy(true);
     setNotice('');
     try {
       const result = await supplierModel.register(form);
+      const hasMedia = media.logoFile || media.mainImageFile || media.galleryFiles?.length;
+      if (hasMedia) {
+        const supplierSession = await authModel.login(form.email, form.password);
+        if (media.logoFile) await supplierModel.uploadProfileLogo(supplierSession, media.logoFile);
+        if (media.mainImageFile) await supplierModel.uploadProfileMainImage(supplierSession, media.mainImageFile);
+        if (media.galleryFiles?.length) await supplierModel.uploadProfileGallery(supplierSession, media.galleryFiles);
+      }
       setNotice(result?.message || 'Tu solicitud de proveedor se ha registrado correctamente.');
       return result;
     } catch (error) {
@@ -715,21 +757,39 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setImageForm((current) => ({ ...current, productId, files: [], imageUrl: '', imageName: '' }));
   }
 
-  async function saveSupplierProduct(event) {
+  async function saveSupplierProduct(event, routeProductId = '') {
     event.preventDefault();
     if (session?.user?.role !== 'supplier') return;
 
     setBusy(true);
     try {
-      if (selectedSupplierProductId) {
-        await supplierModel.updateProduct(request, selectedSupplierProductId, productForm);
-        setNotice('Producto actualizado correctamente.');
+      const pendingFiles = imageForm.files;
+      const editProductId = routeProductId || selectedSupplierProductId;
+      if (editProductId) {
+        const updated = await supplierModel.updateProduct(request, editProductId, productForm);
+        if (pendingFiles.length) {
+          await supplierModel.uploadProductImages(request, editProductId, pendingFiles);
+        }
+        setSelectedSupplierProductId(editProductId);
+        setProductForm(getProductFormFromProduct(updated, {
+          id: 0,
+          name: supplierProfile?.name || session?.user?.name || '',
+          images: [],
+        }));
+        setImageForm((current) => ({ ...current, productId: editProductId, files: [], imageUrl: '', imageName: '' }));
+        setNotice(pendingFiles.length ? 'Producto e imágenes actualizados correctamente.' : 'Producto actualizado correctamente.');
       } else {
         const saved = await supplierModel.createProduct(request, productForm);
-        setImageForm((current) => ({ ...current, productId: saved._id || saved.id || '' }));
-        setNotice('Producto creado correctamente. Queda pendiente de revisión.');
+        const savedId = saved._id || saved.id || '';
+        if (savedId && pendingFiles.length) {
+          await supplierModel.uploadProductImages(request, savedId, pendingFiles);
+        }
+        setImageForm((current) => ({ ...current, productId: savedId }));
+        setNotice(pendingFiles.length
+          ? 'Producto creado con imágenes. Queda pendiente de revisión.'
+          : 'Producto creado correctamente. Queda pendiente de revisión.');
+        resetSupplierProductForm();
       }
-      resetSupplierProductForm();
       await loadSupplierPanel();
       await loadProducts();
       await loadFeaturedProducts();
@@ -757,6 +817,74 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     } finally {
       setBusy(false);
     }
+  }
+
+  async function duplicateSupplierProduct(product) {
+    const productId = product?._id || product?.id;
+    if (!productId || session?.user?.role !== 'supplier') return;
+
+    const baseForm = getProductFormFromProduct(product, {
+      id: 0,
+      name: supplierProfile?.name || session?.user?.name || '',
+      images: [],
+    });
+    const suffix = String(Date.now()).slice(-5);
+    const nextSku = [baseForm.sku || 'SKU', 'COPY', suffix].join('-').slice(0, 54);
+
+    setBusy(true);
+    try {
+      await supplierModel.createProduct(request, {
+        ...baseForm,
+        name: (baseForm.name ? baseForm.name + ' copia' : 'Producto copia').slice(0, 120),
+        sku: nextSku,
+        status: 'draft',
+      });
+      await loadSupplierPanel();
+      setNotice('Producto duplicado como borrador.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveSupplierOffer(product, offerFields) {
+    const productId = product?._id || product?.id;
+    if (!productId || session?.user?.role !== 'supplier') return;
+
+    const baseForm = getProductFormFromProduct(product, {
+      id: 0,
+      name: supplierProfile?.name || session?.user?.name || '',
+      images: [],
+    });
+
+    setBusy(true);
+    try {
+      await supplierModel.updateProduct(request, productId, {
+        ...baseForm,
+        ...offerFields,
+      });
+      await loadSupplierPanel();
+      await loadProducts();
+      await loadFeaturedProducts();
+      setNotice('Oferta actualizada correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeSupplierOffer(product) {
+    await saveSupplierOffer(product, {
+      offerType: 'none',
+      offerValue: '',
+      offerBundleQuantity: '3',
+      offerBundlePayQuantity: '2',
+      offerLabel: '',
+      offerValidFrom: '',
+      offerValidUntil: '',
+    });
   }
 
   async function loadAdminUsers() {
@@ -787,6 +915,85 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  const updateAccountProfileForm = (field, value) => {
+    setAccountProfileForm((current) => ({ ...current, [field]: value }));
+  };
+
+  async function saveAccountProfile(event) {
+    event.preventDefault();
+    const userId = session?.user?._id || session?.user?.id;
+    if (!userId) return;
+
+    setBusy(true);
+    try {
+      const updated = await userModel.update(request, userId, accountProfileForm);
+      const nextSession = {
+        ...session,
+        user: {
+          ...session.user,
+          ...updated,
+        },
+      };
+      applySession(nextSession);
+      setAccountProfileForm(getAccountProfileDefaults(nextSession));
+      setNotice('Datos de perfil actualizados correctamente.');
+    } catch (error) {
+      setNotice(translateAuthMessage(error.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteOwnAccount() {
+    const userId = session?.user?._id || session?.user?.id;
+    if (!userId) return;
+    if (!window.confirm('¿Seguro que quieres eliminar tu cuenta? Esta acción cerrará tu sesión.')) return;
+
+    setBusy(true);
+    try {
+      await userModel.delete(request, userId);
+      applySession(null);
+      setOrders([]);
+      setCart(null);
+      setView('home');
+      setNotice('Tu cuenta se ha eliminado correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelOrder(order, reason = 'Cancelado por el cliente') {
+    const orderId = order?._id || order?.id;
+    if (!orderId || !session) return;
+    if ((order.status || 'pending') !== 'pending') {
+      setNotice('Solo puedes anular pedidos en estado pendiente.');
+      return;
+    }
+    if (!window.confirm('¿Quieres anular este pedido pendiente?')) return;
+
+    setBusy(true);
+    try {
+      await orderModel.cancel(request, orderId, reason);
+      await loadOrders();
+      await loadProducts();
+      await loadFeaturedProducts();
+      if (session.user?.role === 'admin') {
+        await loadAdminProducts();
+        await loadAdminSuppliers();
+      }
+      if (session.user?.role === 'supplier') {
+        await loadSupplierPanel();
+      }
+      setNotice('Pedido anulado correctamente. El stock vuelve a estar disponible y queda registrado el abono.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleAuth(event) {
     event.preventDefault();
     setBusy(true);
@@ -797,7 +1004,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         const next = await authModel.login(authForm.email, authForm.password);
         applySession(next);
         setView(next.user?.role === 'admin' ? 'admin' : next.user?.role === 'supplier' ? 'supplier' : 'catalog');
-        setNotice('Bienvenido, ' + (next.user?.name || 'cliente'));
+        setNotice('Hola, ' + (next.user?.name || 'cliente') + '. Todo listo en Mi cuenta.');
       } else {
         if (!authForm.accountType) {
           setAuthFeedback({ type: 'error', message: 'Elige si quieres darte de alta como cliente o proveedor.' });
@@ -874,7 +1081,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setBusy(true);
     try {
       setCart(await cartModel.addItem(request, product, quantity));
-      setNotice(product.name + ' añadido al carrito');
+      setNotice(formatNoticeProductName(product.name) + ' añadido al carrito');
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -1619,7 +1826,24 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }
 
   async function deleteAdminSupplier() {
-    await setAdminSupplierAction('deactivate');
+    if (!selectedAdminSupplierId) {
+      setNotice('Selecciona un proveedor para eliminarlo.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await adminModel.deleteSupplier(request, selectedAdminSupplierId);
+      resetSupplierForm();
+      await loadAdminSuppliers();
+      await loadAdminProducts();
+      await loadProducts();
+      setNotice('Proveedor eliminado de la base de datos.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function selectAdminUser(user) {
@@ -1769,6 +1993,50 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  async function approveAdminProduct(product) {
+    const productId = product?._id || product?.id;
+    if (!productId || session?.user?.role !== 'admin') return;
+
+    setBusy(true);
+    try {
+      await adminModel.approveProduct(request, productId);
+      await loadProducts();
+      await loadFeaturedProducts();
+      await loadAdminProducts();
+      await loadAdminSuppliers();
+      setNotice('Producto aprobado y publicado correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rejectAdminProduct(product) {
+    const productId = product?._id || product?.id;
+    if (!productId || session?.user?.role !== 'admin') return;
+    const reason = window.prompt('Indica el motivo del rechazo para que el proveedor pueda corregirlo:');
+    if (reason == null) return;
+    if (reason.trim().length < 3) {
+      setNotice('Indica un motivo claro para rechazar el producto.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await adminModel.rejectProduct(request, productId, reason.trim());
+      await loadProducts();
+      await loadFeaturedProducts();
+      await loadAdminProducts();
+      await loadAdminSuppliers();
+      setNotice('Producto rechazado. El proveedor verá el motivo para corregirlo.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function uploadProductImages(event) {
     event.preventDefault();
     if (!imageForm.productId || imageForm.files.length === 0) {
@@ -1875,6 +2143,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       adminSearch,
       adminReviews,
       accountReviewForm,
+      accountProfileForm,
       adminUserForm,
       adminUsers,
       authFeedback,
@@ -1935,6 +2204,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       createCategory,
       createProduct,
       createOrder,
+      approveAdminProduct,
+      rejectAdminProduct,
+      cancelOrder,
       deleteAdminUser,
       deleteCategory,
       deleteProduct,
@@ -1958,6 +2230,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAdminSupplierAction,
       saveAdminUser,
       saveAccountReview,
+      saveAccountProfile,
       saveSupplierProfile,
       selectAdminCategory,
       selectAdminProduct,
@@ -1978,6 +2251,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       updateAuthForm,
       updateAdminUserForm,
       updateAccountReviewForm,
+      updateAccountProfileForm,
       updateCartItem,
       updateCategoryForm,
       updateHomeComponentForm,
@@ -2011,8 +2285,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       uploadProductImages,
       uploadSupplierProductImages,
       deleteOrder,
+      deleteOwnAccount,
       deleteSupplierProduct,
       deleteAdminSupplier,
+      duplicateSupplierProduct,
+      saveSupplierOffer,
+      removeSupplierOffer,
     },
   };
 }

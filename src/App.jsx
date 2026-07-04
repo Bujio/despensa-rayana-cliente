@@ -46,6 +46,7 @@ function readRoute(location) {
     '/la-rayana': 'story',
     '/pedidos': 'orders',
     '/cuenta': 'account',
+    '/cuenta/registro': 'account',
     '/gestion': 'admin',
     '/supplier': 'supplier',
   };
