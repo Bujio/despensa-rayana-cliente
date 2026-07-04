@@ -728,29 +728,30 @@ input:focus, select:focus { border-color: #315c45; box-shadow: 0 0 0 3px rgba(49
 .detail-facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .detail-facts div {
   display: grid;
-  gap: 6px;
-  min-height: 92px;
+  gap: 3px;
+  min-height: 54px;
   align-content: center;
-  padding: 14px;
-  border: 1px solid rgba(49, 92, 69, 0.14);
+  padding: 9px 10px;
+  border: 1px solid rgba(49, 92, 69, 0.1);
   border-radius: 8px;
-  background: #ffffff;
+  background: rgba(255, 253, 248, 0.58);
 }
 
 .detail-facts span {
   color: #697067;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
+  text-transform: uppercase;
 }
 
 .detail-facts strong {
   color: #1f3328;
-  font-size: 18px;
+  font-size: 13px;
   line-height: 1.25;
 }
 
@@ -1868,6 +1869,62 @@ textarea:focus-visible,
   font-size: 12px;
 }
 
+.cart-mini-toast {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 85;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  padding: 9px 12px;
+  border: 1px solid rgba(220, 171, 84, 0.42);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #234f36 0%, #315c45 72%, #8a2f22 100%);
+  color: #fff7df;
+  box-shadow:
+    0 16px 34px rgba(30, 42, 34, 0.2),
+    0 0 0 4px rgba(220, 171, 84, 0.14);
+  font-size: 13px;
+  font-weight: 900;
+  animation: cartMiniToast 1.5s ease both;
+}
+
+.cart-mini-toast svg {
+  color: #e3b85e;
+  filter: drop-shadow(0 0 6px rgba(227, 184, 94, 0.28));
+}
+
+.cart-mini-toast::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 22px;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  background: #234f36;
+  border-left: 1px solid rgba(220, 171, 84, 0.42);
+  border-top: 1px solid rgba(220, 171, 84, 0.42);
+}
+
+@keyframes cartMiniToast {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  14%,
+  78% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
 .mobile-menu-button {
   display: none;
   width: 42px;
@@ -2268,7 +2325,7 @@ main {
 }
 
 .product-card.ecommerce-card {
-  min-height: 386px;
+  min-height: 348px;
   border-color: var(--color-border);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.92);
@@ -2383,6 +2440,39 @@ main {
   border-radius: var(--radius-sm);
   background: var(--color-forest);
   color: var(--color-white);
+}
+
+.related-products-section {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(49, 92, 69, 0.14);
+}
+
+.related-products-section .section-heading {
+  margin-bottom: 0;
+}
+
+.related-products-section h2 {
+  margin: 0;
+  color: var(--color-forest-dark);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 3vw, 40px);
+}
+
+.related-product-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.related-product-grid .product-card.ecommerce-card {
+  min-height: 330px;
+}
+
+.related-product-grid .product-media {
+  height: 180px;
 }
 
 .primary {
@@ -2833,6 +2923,51 @@ main {
   line-height: 1.7;
 }
 
+.collapsible-description {
+  position: relative;
+  max-height: 245px;
+  overflow: hidden;
+}
+
+.collapsible-description::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 96px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(245, 241, 232, 0), #f5f1e8 82%);
+}
+
+.collapsible-description.expanded {
+  max-height: none;
+}
+
+.collapsible-description.expanded::after {
+  display: none;
+}
+
+.description-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  width: fit-content;
+  margin-top: 10px;
+  border: 1px solid rgba(35, 79, 54, 0.18);
+  border-radius: 999px;
+  background: #234f36;
+  color: #fff7df;
+  padding: 8px 13px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.description-toggle-button svg {
+  color: #e3b85e;
+}
+
 .rich-product-description h2 {
   margin: 0 0 12px;
   color: #1e2a22;
@@ -3149,7 +3284,8 @@ main {
 
   .trust-band,
   .category-showcase,
-  .product-grid {
+  .product-grid,
+  .related-product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -3201,6 +3337,7 @@ main {
   .trust-band,
   .category-showcase,
   .product-grid,
+  .related-product-grid,
   .featured-grid,
   .story-grid,
   .detail-facts,

@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 import { useEffect, useMemo, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { reviewModel } from '../models/reviewModel.js';
+import { ProductCard } from './ProductCard.jsx';
 import { formatCurrency, formatProductName } from './viewFormatters.js';
 
 function sanitizeRichDescription(value) {
@@ -21,20 +22,66 @@ function RichProductText({ className = 'rich-product-description', content }) {
   return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+function getProductId(product) {
+  return String(product?._id || product?.id || product?.sku || '');
+}
+
+function normalizeSupplierKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getSupplierKeys(product) {
+  const supplier = product?.supplier || product?.supplierRef || {};
+  if (typeof supplier === 'string') return [normalizeSupplierKey(supplier)].filter(Boolean);
+  return [
+    supplier?._id
+      || product?.supplierRef?._id,
+    supplier?.id,
+    supplier?.supplierCode,
+    product?.supplierId,
+    product?.supplierCode,
+    supplier?.name,
+    product?.supplierName,
+  ].map(normalizeSupplierKey).filter(Boolean);
+}
+
+function getUniqueRelatedProducts(candidates, selectedProduct) {
+  const selectedId = getProductId(selectedProduct);
+  const selectedSupplierKeys = new Set(getSupplierKeys(selectedProduct));
+  if (!selectedSupplierKeys.size) return [];
+
+  const seen = new Set();
+  return candidates
+    .filter((product) => {
+      const productId = getProductId(product);
+      if (!productId || productId === selectedId || seen.has(productId)) return false;
+      if (!getSupplierKeys(product).some((key) => selectedSupplierKeys.has(key))) return false;
+      seen.add(productId);
+      return true;
+    })
+    .slice(0, 4);
+}
+
 export function ProductView({ state, actions }) {
-  const { busy, favoriteIds, loadingProductDetail, productReviews, reservedBySku, reviewForm, selectedProduct, session } = state;
+  const { busy, favoriteIds, featuredProducts = [], loadingProductDetail, productReviews, products = [], relatedProducts: loadedRelatedProducts = [], reservedBySku, reviewForm, selectedProduct, session } = state;
   const [quantity, setQuantity] = useState(1);
   const [imageFailed, setImageFailed] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
   const [activeTab, setActiveTab] = useState('description');
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   const gallery = useMemo(() => {
     return productModel.getImages(selectedProduct);
   }, [selectedProduct]);
 
+  const relatedProducts = useMemo(() => {
+    return getUniqueRelatedProducts([...loadedRelatedProducts, ...featuredProducts, ...products], selectedProduct);
+  }, [featuredProducts, loadedRelatedProducts, products, selectedProduct]);
+
   useEffect(() => {
     setImageFailed(false);
     setSelectedImage(gallery[0]?.url || '');
+    setIsDescriptionExpanded(false);
   }, [gallery, selectedProduct?._id, selectedProduct?.id, selectedProduct?.sku]);
 
   if (!selectedProduct) {
@@ -175,7 +222,15 @@ export function ProductView({ state, actions }) {
 
         {activeTab === 'description' && (
           <div className="tab-content">
-            <RichProductText content={longDescription} />
+            <div className={'collapsible-description' + (isDescriptionExpanded ? ' expanded' : '')}>
+              <RichProductText content={longDescription} />
+            </div>
+            {longDescription && (
+              <button className="description-toggle-button" type="button" onClick={() => setIsDescriptionExpanded((value) => !value)}>
+                {isDescriptionExpanded ? <Minus size={17} /> : <Plus size={17} />}
+                {isDescriptionExpanded ? 'Ver menos' : 'Ver descripción completa'}
+              </button>
+            )}
             <div className="product-origin-facts">
               <span><BadgeCheck size={18} /> Origen seleccionado</span>
               <span><ShieldCheck size={18} /> Calidad contrastada</span>
@@ -229,6 +284,34 @@ export function ProductView({ state, actions }) {
           </div>
         )}
       </section>
+
+      {relatedProducts.length > 0 && (
+        <section className="related-products-section">
+          <div className="section-heading compact">
+            <div>
+              <h2>Más productos de este proveedor</h2>
+              <p>Selección relacionada del mismo origen para completar tu despensa.</p>
+            </div>
+          </div>
+          <div className="related-product-grid">
+            {relatedProducts.map((product) => {
+              const productId = getProductId(product);
+              return (
+                <ProductCard
+                  key={productId}
+                  product={product}
+                  busy={busy}
+                  isFavorite={favoriteIds.includes(productId)}
+                  reservedBySku={reservedBySku}
+                  onAdd={actions.addToCart}
+                  onOpen={actions.openProduct}
+                  onToggleFavorite={actions.toggleFavorite}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
     </section>
   );
 }

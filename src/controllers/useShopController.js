@@ -20,6 +20,42 @@ function formatNoticeProductName(value) {
   return name.charAt(0).toLocaleUpperCase('es-ES') + name.slice(1);
 }
 
+function normalizeSupplierKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getProductSupplierKeys(product) {
+  const supplier = product?.supplier || product?.supplierRef || {};
+  if (typeof supplier === 'string') return [normalizeSupplierKey(supplier)].filter(Boolean);
+  return [
+    supplier?._id
+      || product?.supplierRef?._id,
+    supplier?.id,
+    supplier?.supplierCode,
+    product?.supplierId,
+    product?.supplierCode,
+    supplier?.name,
+    product?.supplierName,
+  ].map(normalizeSupplierKey).filter(Boolean);
+}
+
+function filterRelatedProducts(candidates, selectedProduct) {
+  const selectedId = getProductId(selectedProduct);
+  const supplierKeys = new Set(getProductSupplierKeys(selectedProduct));
+  if (!supplierKeys.size) return [];
+
+  const seen = new Set();
+  return candidates
+    .filter((product) => {
+      const productId = getProductId(product);
+      if (!productId || productId === selectedId || seen.has(productId)) return false;
+      if (!getProductSupplierKeys(product).some((key) => supplierKeys.has(key))) return false;
+      seen.add(productId);
+      return true;
+    })
+    .slice(0, 4);
+}
+
 function isInvalidSessionMessage(message) {
   const value = String(message || '').toLowerCase();
   return [
@@ -356,6 +392,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [session, setSession] = useState(() => sessionModel.get());
   const [products, setProducts] = useState([]);
   const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [relatedProducts, setRelatedProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productReviews, setProductReviews] = useState([]);
   const [myReviews, setMyReviews] = useState([]);
@@ -367,6 +404,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [loadingProductDetail, setLoadingProductDetail] = useState(false);
   const [categories, setCategories] = useState([]);
   const [cart, setCart] = useState(null);
+  const [cartFeedback, setCartFeedback] = useState(null);
   const [orders, setOrders] = useState([]);
   const [filters, setFilters] = useState(() => ({ ...emptyFilters }));
   const [favoriteIds, setFavoriteIds] = useState(() => favoritesModel.getAll());
@@ -500,6 +538,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     if (routeView !== 'product') {
       setSelectedProduct(null);
       setProductReviews([]);
+      setRelatedProducts([]);
     }
   }, [routeView]);
 
@@ -624,12 +663,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     if (!productId) return;
 
     setSelectedProduct(product);
+    setRelatedProducts([]);
     setView('product', { productId });
     setLoadingProductDetail(true);
     await loadProductReviews(productId);
     try {
       const fullProduct = await catalogModel.getProduct(productId);
       setSelectedProduct(fullProduct);
+      await loadRelatedProducts(fullProduct);
       await loadProductReviews(productId);
     } catch (error) {
       setNotice(error.message);
@@ -647,12 +688,33 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     try {
       const fullProduct = await catalogModel.getProduct(productId);
       setSelectedProduct(fullProduct);
+      await loadRelatedProducts(fullProduct);
       await loadProductReviews(productId);
     } catch (error) {
       setNotice(error.message);
       setSelectedProduct(null);
+      setRelatedProducts([]);
     } finally {
       setLoadingProductDetail(false);
+    }
+  }
+
+  async function loadRelatedProducts(product) {
+    try {
+      const localRelated = filterRelatedProducts([...featuredProducts, ...products], product);
+      if (localRelated.length >= 4) {
+        setRelatedProducts(localRelated);
+        return;
+      }
+
+      const result = await catalogModel.listProducts({
+        page: 1,
+        filters: { ...emptyFilters, inStock: false },
+        limit: 100,
+      });
+      setRelatedProducts(filterRelatedProducts([...localRelated, ...(result.products || [])], product));
+    } catch {
+      setRelatedProducts(filterRelatedProducts([...featuredProducts, ...products], product));
     }
   }
 
@@ -1119,7 +1181,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setBusy(true);
     try {
       setCart(await cartModel.addItem(request, product, quantity));
-      setNotice(formatNoticeProductName(product.name) + ' añadido al carrito');
+      setCartFeedback({
+        id: Date.now(),
+        productName: formatNoticeProductName(product.name),
+        quantity,
+      });
+      setCheckoutStep('items');
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -1154,6 +1221,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setBusy(true);
     try {
       setCart(await cartModel.clear(request));
+      setCartFeedback(null);
       setCheckoutStep('items');
       setCheckoutErrors({});
     } catch (error) {
@@ -1320,6 +1388,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       await loadProducts();
       setCheckoutStep('items');
       setCheckoutErrors({});
+      setCartFeedback(null);
       setPaymentForm({ ...initialPaymentForm });
       setView('orders');
       setNotice('Pedido creado correctamente.');
@@ -2189,6 +2258,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       authMode,
       busy,
       cartCount,
+      cartFeedback,
       cartItems,
       cartTotal,
       categories,
@@ -2212,6 +2282,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       productForm,
       productReviews,
       products,
+      relatedProducts,
       reviewForm,
       reservedBySku,
       selectedProduct,
@@ -2259,6 +2330,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       openAdminTab,
       openAdminUserOrders,
       removeCartItem,
+      dismissCartFeedback: () => setCartFeedback(null),
       resetFilters,
       resetCategoryForm,
       resetProductForm,

@@ -20,6 +20,7 @@ export function AppView({ state, actions }) {
     <div className="app-shell">
       <Header
         cartCount={state.cartCount}
+        cartFeedback={state.cartFeedback}
         busy={state.busy}
         filters={state.filters}
         session={state.session}
@@ -32,6 +33,7 @@ export function AppView({ state, actions }) {
           actions.setView('catalog');
         }}
         onViewChange={actions.setView}
+        onDismissCartFeedback={actions.dismissCartFeedback}
       />
 
       <Notice message={state.notice} onClose={() => actions.setNotice('')} />

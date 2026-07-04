@@ -1,5 +1,5 @@
-import { Heart, LayoutDashboard, LogOut, Menu, PackageCheck, PackagePlus, Search, Settings, ShoppingBag, UserRound, X } from 'lucide-react';
-import { useState } from 'react';
+import { CheckCircle2, Heart, LayoutDashboard, LogOut, Menu, PackageCheck, PackagePlus, Search, Settings, ShoppingBag, UserRound, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 const commerceSections = [
   'Alimentación',
@@ -13,9 +13,17 @@ const commerceSections = [
   'La Rayana',
 ];
 
-export function Header({ cartCount, busy, filters, session, view, onCommerceCategory, onFavorites, onLogout, onSearch, onViewChange }) {
+export function Header({ cartCount, cartFeedback, busy, filters, session, view, onCommerceCategory, onDismissCartFeedback, onFavorites, onLogout, onSearch, onViewChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+
+  useEffect(() => {
+    if (!cartFeedback) return undefined;
+    const timeout = window.setTimeout(() => {
+      onDismissCartFeedback?.();
+    }, 1500);
+    return () => window.clearTimeout(timeout);
+  }, [cartFeedback?.id, onDismissCartFeedback]);
 
   const goTo = (nextView) => {
     onViewChange(nextView);
@@ -92,6 +100,12 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
             <ShoppingBag size={18} />
             <span>{cartCount}</span>
           </button>
+          {cartFeedback && (
+            <div className="cart-mini-toast" role="status">
+              <CheckCircle2 size={16} />
+              <span>Añadido a cesta</span>
+            </div>
+          )}
         </div>
       </div>
 
