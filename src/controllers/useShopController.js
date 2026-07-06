@@ -1,356 +1,42 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../models/apiClient.js';
-import { adminModel } from '../models/adminModel.js';
-import { authModel } from '../models/authModel.js';
-import { cartModel } from '../models/cartModel.js';
-import { catalogModel } from '../models/catalogModel.js';
 import { categoryVisualModel } from '../models/categoryVisualModel.js';
-import { emptyFilters, productModel } from '../models/productModel.js';
+import { emptyFilters } from '../models/productModel.js';
 import { favoritesModel } from '../models/favoritesModel.js';
 import { homeContentModel } from '../models/homeContentModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { sessionModel } from '../models/sessionModel.js';
-import { supplierModel } from '../models/supplierModel.js';
-import { userModel } from '../models/userModel.js';
-import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
-
-function formatNoticeProductName(value) {
-  const name = String(value || '').trim();
-  if (!name) return '';
-  return name.charAt(0).toLocaleUpperCase('es-ES') + name.slice(1);
-}
-
-function isInvalidSessionMessage(message) {
-  const value = String(message || '').toLowerCase();
-  return [
-    'invalid token',
-    'jwt expired',
-    'jwt malformed',
-    'invalid signature',
-    'token expired',
-  ].some((tokenMessage) => value.includes(tokenMessage));
-}
-
-function shouldShowSupplierLoginWelcome(user) {
-  if (user?.role !== 'supplier') return false;
-  const userKey = user._id || user.id || user.email;
-  if (!userKey || typeof window === 'undefined') return false;
-
-  const storageKey = 'despensa-supplier-welcome-seen:' + userKey;
-  if (window.localStorage.getItem(storageKey)) return false;
-  window.localStorage.setItem(storageKey, 'true');
-  return true;
-}
-
-function translateAuthMessage(message) {
-  const value = String(message || '').toLowerCase();
-  if (!value) return 'No se pudo completar la operación.';
-  if (value.includes('invalid credentials')) return 'El email o la contraseña no son correctos.';
-  if (value.includes('email already in use')) return 'Ya existe una cuenta con este email.';
-  if (value.includes('password must be at least')) return 'La contraseña debe tener al menos 6 caracteres.';
-  if (value.includes('password must contain at least one uppercase')) return 'La contraseña debe incluir al menos una letra mayúscula.';
-  if (value.includes('password must contain at least one number')) return 'La contraseña debe incluir al menos un número.';
-  if (value.includes('invalid email')) return 'Introduce un email válido.';
-  if (value.includes('name must be at least')) return 'El nombre debe tener al menos 2 caracteres.';
-  if (value.includes('too many')) return 'Se han realizado demasiados intentos. Inténtalo de nuevo más tarde.';
-  if (value.includes('failed to fetch') || value.includes('networkerror')) return 'No se ha podido conectar con el servidor.';
-  return message || 'No se pudo completar la operación.';
-}
-
-const initialAuthForm = {
-  accountType: '',
-  name: '',
-  legalName: '',
-  description: '',
-  email: '',
-  password: '',
-  phone: '',
-  street: '',
-  codePostal: '',
-  city: '',
-  country: 'España',
-};
-
-const initialCategoryForm = {
-  name: '',
-  description: '',
-};
-
-const initialProductForm = {
-  name: '',
-  sku: '',
-  price: '',
-  shortDescription: '',
-  description: '',
-  stock: '0',
-  category: '',
-  supplierId: '1',
-  supplierName: '',
-  supplierImages: [],
-  images: [],
-  status: 'pending_review',
-  offerType: 'none',
-  offerValue: '',
-  offerBundleQuantity: '3',
-  offerBundlePayQuantity: '2',
-  offerLabel: '',
-  offerValidFrom: '',
-  offerValidUntil: '',
-};
-
-const initialAdminSearch = {
-  users: '',
-  products: '',
-  categories: '',
-  orders: '',
-  media: '',
-  reviews: '',
-  suppliers: '',
-};
-
-const initialSupplierForm = {
-  name: '',
-  legalName: '',
-  phone: '',
-  status: '',
-  featured: false,
-  internalNotes: '',
-  rejectionReason: '',
-};
-
-const initialImageForm = {
-  productId: '',
-  files: [],
-  imageUrl: '',
-  imageName: '',
-};
-
-const initialHomeComponentForm = {
-  type: 'promoBanner',
-  title: '',
-  subtitle: '',
-  body: '',
-  imageUrl: '',
-  linkUrl: '',
-  ctaLabel: '',
-  productIds: [],
-  itemOneTitle: '',
-  itemOneBody: '',
-  itemOneImageUrl: '',
-  itemOneLinkUrl: '',
-  itemTwoTitle: '',
-  itemTwoBody: '',
-  itemTwoImageUrl: '',
-  itemTwoLinkUrl: '',
-  itemThreeTitle: '',
-  itemThreeBody: '',
-  itemThreeImageUrl: '',
-  itemThreeLinkUrl: '',
-};
-
-const initialAdminUserForm = {
-  name: '',
-  email: '',
-  phone: '',
-  street: '',
-  codePostal: '',
-  city: '',
-  country: '',
-  role: 'user',
-  password: '',
-};
-
-const initialAccountProfileForm = {
-  name: '',
-  email: '',
-  phone: '',
-  street: '',
-  codePostal: '',
-  city: '',
-  country: '',
-  password: '',
-};
-
-const initialPaymentForm = {
-  holder: '',
-  cardNumber: '',
-  expiry: '',
-  cvc: '',
-};
-
-const getShippingDefaults = (session) => ({
-  street: session?.user?.address?.street || '',
-  codePostal: session?.user?.address?.codePostal || '',
-  city: session?.user?.address?.city || '',
-  country: session?.user?.address?.country || 'España',
-  phone: session?.user?.phone || '',
-});
-
-const getAccountProfileDefaults = (session) => ({
-  name: session?.user?.name || '',
-  email: session?.user?.email || '',
-  phone: session?.user?.phone || '',
-  street: session?.user?.address?.street || '',
-  codePostal: session?.user?.address?.codePostal || '',
-  city: session?.user?.address?.city || '',
-  country: session?.user?.address?.country || 'España',
-  password: '',
-});
-
-const validateShippingForm = (form) => {
-  const errors = {};
-  if (form.street.trim().length < 3) errors.street = 'Indica una calle válida.';
-  if (!/^\d{5}$/.test(form.codePostal.trim())) errors.codePostal = 'El código postal debe tener 5 números.';
-  if (form.city.trim().length < 2) errors.city = 'Indica una ciudad válida.';
-  if (form.country.trim().length < 2) errors.country = 'Indica un país válido.';
-  if (form.phone.replace(/\s/g, '').length < 6) errors.phone = 'Indica un teléfono válido.';
-  return errors;
-};
-
-const validatePaymentForm = (form) => {
-  const errors = {};
-  const cardNumber = form.cardNumber.replace(/\s/g, '');
-  const cvc = form.cvc.trim();
-  const expiry = form.expiry.trim();
-
-  if (form.holder.trim().length < 3) errors.holder = 'Indica el titular de la tarjeta.';
-  if (!/^\d{13,19}$/.test(cardNumber)) errors.cardNumber = 'La tarjeta debe tener entre 13 y 19 números.';
-  if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry)) errors.expiry = 'Usa el formato MM/AA.';
-  if (!/^\d{3,4}$/.test(cvc)) errors.cvc = 'El CVC debe tener 3 o 4 números.';
-  return errors;
-};
-
-const formatDateInput = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 10);
-};
-
-const getProductId = (product) => String(product?._id || product?.id || product?.sku || '');
-const getSupplierKey = (supplier) => String(supplier?._id || supplier?.id || supplier?.supplierCode || supplier?.name || '').trim();
-
-function getProductFormFromProduct(product, supplierOverride = null) {
-  const offer = product?.offer || {};
-  const supplier = supplierOverride || product?.supplier || {};
-  const supplierRef = typeof product?.supplierRef === 'object'
-    ? product.supplierRef?._id || product.supplierRef?.id || ''
-    : product?.supplierRef || '';
-
-  return {
-    name: product?.name || '',
-    sku: product?.sku || '',
-    price: product?.price ?? '',
-    shortDescription: product?.shortDescription || '',
-    description: product?.description || '',
-    stock: product?.stock ?? '0',
-    category: typeof product?.category === 'object' ? product.category?._id || product.category?.id || '' : product?.category || '',
-    supplierId: supplierRef || supplier.supplierCode || supplier.id || '0',
-    supplierName: supplier.name || product?.supplierRef?.name || '',
-    supplierImages: Array.isArray(supplier.images) ? supplier.images : [],
-    images: Array.isArray(product?.images) ? product.images : [],
-    status: product?.status || 'pending_review',
-    offerType: offer.active ? offer.type || 'none' : 'none',
-    offerValue: offer.value ?? '',
-    offerBundleQuantity: offer.bundleQuantity || '3',
-    offerBundlePayQuantity: offer.bundlePayQuantity || '2',
-    offerLabel: offer.label || '',
-    offerValidFrom: formatDateInput(offer.validFrom),
-    offerValidUntil: formatDateInput(offer.validUntil),
-  };
-}
-
-const routeByView = {
-  home: '/',
-  catalog: '/catalogo',
-  cart: '/cesta',
-  story: '/la-rayana',
-  orders: '/pedidos',
-  account: '/cuenta',
-  accountRegister: '/cuenta/registro',
-  admin: '/gestion',
-  supplier: '/supplier',
-  supplierRegister: '/supplier/register',
-  supplierLogin: '/supplier/login',
-};
-
-const adminRouteByTab = {
-  dashboard: '/admin',
-  homepage: '/admin/home',
-  products: '/admin/products',
-  categories: '/admin/categories',
-  orders: '/admin/orders',
-  users: '/admin/users',
-  suppliers: '/admin/suppliers',
-  offers: '/admin/offers',
-  content: '/admin/content',
-  messages: '/admin/messages',
-  reports: '/admin/reports',
-  settings: '/admin/settings',
-  reviews: '/admin/reviews',
-  media: '/admin/media',
-};
-
-const adminTabByRoute = Object.fromEntries(
-  Object.entries(adminRouteByTab).map(([tab, path]) => [path, tab]),
-);
-
-function buildRoute(view, { categorySlug = '', productId = '' } = {}) {
-  if (view === 'product' && productId) return '/producto/' + encodeURIComponent(productId);
-  if (view === 'catalog' && categorySlug) return '/catalogo/' + encodeURIComponent(categorySlug);
-  return routeByView[view] || routeByView.home;
-}
-
-function assignHomeImage(content, target, imageUrl) {
-  if (target === 'hero.imageUrl') {
-    return {
-      ...content,
-      hero: {
-        ...content.hero,
-        imageUrl,
-      },
-    };
-  }
-
-  if (target.startsWith('sectionItem.')) {
-    const [, sectionId, itemIndex, field] = target.split('.');
-    return {
-      ...content,
-      sections: content.sections.map((section) => {
-        if (section.id !== sectionId) return section;
-        const items = [...(Array.isArray(section.items) ? section.items : [])];
-        items[Number(itemIndex)] = {
-          title: '',
-          body: '',
-          imageUrl: '',
-          linkUrl: '',
-          ...(items[Number(itemIndex)] || {}),
-          [field]: imageUrl,
-        };
-        return { ...section, items };
-      }),
-    };
-  }
-
-  if (target.startsWith('section.')) {
-    const [, sectionId, field] = target.split('.');
-    return {
-      ...content,
-      sections: content.sections.map((section) => (
-        section.id === sectionId ? { ...section, [field]: imageUrl } : section
-      )),
-    };
-  }
-
-  return content;
-}
-
-const hasClientSideFilters = (filters) => Boolean(
-  filters.onlyOffers ||
-  filters.origin ||
-  filters.favoritesOnly ||
-  filters.categoryGroupIds?.length,
-);
+import { emptyReviewForm } from '../models/reviewModel.js';
+import { createAdminControllerActions } from './adminControllerActions.js';
+import { createAuthAccountControllerActions } from './authAccountControllerActions.js';
+import { createCartCheckoutControllerActions } from './cartCheckoutControllerActions.js';
+import { createCatalogControllerActions } from './catalogControllerActions.js';
+import { createHomeContentControllerActions } from './homeContentControllerActions.js';
+import { createReviewControllerActions } from './reviewControllerActions.js';
+import { createSupplierControllerActions } from './supplierControllerActions.js';
+import {
+  initialAccountProfileForm,
+  initialAdminSearch,
+  initialAdminUserForm,
+  initialAuthForm,
+  initialCategoryForm,
+  initialHomeComponentForm,
+  initialImageForm,
+  initialPaymentForm,
+  initialProductForm,
+  initialSupplierForm,
+} from './controllerInitialState.js';
+import {
+  getAccountProfileDefaults,
+  getProductId,
+  getShippingDefaults,
+  isInvalidSessionMessage,
+} from './controllerHelpers.js';
+import {
+  adminRouteByTab,
+  adminTabByRoute,
+  buildRoute,
+} from './controllerRoutes.js';
 
 export function useShopController({ navigate, routeCategorySlug = '', routePath = '/', routeProductId = '', routeView = 'home' } = {}) {
   const [session, setSession] = useState(() => sessionModel.get());
@@ -441,13 +127,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     [orders, selectedAdminOrderId],
   );
 
-  const saveHomeContent = (updater) => {
-    setHomeContent((current) => {
-      const next = typeof updater === 'function' ? updater(current) : updater;
-      return homeContentModel.save(next);
-    });
-  };
-
   const applySession = (nextSession) => {
     setSession(nextSession);
     if (nextSession) sessionModel.save(nextSession);
@@ -485,6 +164,241 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  const {
+    loadCategories,
+    loadFeaturedProducts,
+    loadProductFromRoute,
+    loadProductReviews,
+    loadProducts,
+    openProduct,
+  } = createCatalogControllerActions({
+    favoriteIds,
+    filters,
+    page,
+    selectedProduct,
+    setCategories,
+    setFeaturedProducts,
+    setLoadingProductDetail,
+    setLoadingProducts,
+    setNotice,
+    setPagination,
+    setProductReviews,
+    setProducts,
+    setSelectedProduct,
+    setView,
+  });
+
+  const {
+    addToCart,
+    clearCart,
+    createOrder,
+    goToCartItems,
+    goToPayment,
+    goToShipping,
+    loadCart,
+    removeCartItem,
+    updateCartItem,
+    updatePaymentForm,
+    updateShippingForm,
+  } = createCartCheckoutControllerActions({
+    cartItems,
+    loadOrders,
+    loadProducts,
+    paymentForm,
+    request,
+    reservedBySku,
+    session,
+    setBusy,
+    setCart,
+    setCheckoutErrors,
+    setCheckoutStep,
+    setNotice,
+    setPaymentForm,
+    setShippingForm,
+    setView,
+    shippingForm,
+  });
+
+  const {
+    changeAuthMode,
+    chooseAccountType,
+    deleteOwnAccount,
+    handleAuth,
+    handleLogout,
+    saveAccountProfile,
+    updateAccountProfileForm,
+    updateAuthForm,
+  } = createAuthAccountControllerActions({
+    accountProfileForm,
+    applySession,
+    authForm,
+    authMode,
+    request,
+    session,
+    setAccountProfileForm,
+    setAuthFeedback,
+    setAuthForm,
+    setAuthMode,
+    setBusy,
+    setCart,
+    setNotice,
+    setOrders,
+    setView,
+  });
+
+  const {
+    deleteReview,
+    loadAdminReviews,
+    loadMyReviews,
+    saveAccountReview,
+    selectAccountReview,
+    submitProductReview,
+    updateAccountReviewForm,
+    updateReviewForm,
+  } = createReviewControllerActions({
+    accountReviewForm,
+    loadProductReviews,
+    request,
+    reviewForm,
+    selectedAccountReviewId,
+    selectedProduct,
+    session,
+    setAccountReviewForm,
+    setAdminReviews,
+    setBusy,
+    setMyReviews,
+    setNotice,
+    setReviewForm,
+    setSelectedAccountReviewId,
+    setView,
+  });
+
+  const {
+    deleteSupplierProduct,
+    duplicateSupplierProduct,
+    loadSupplierPanel,
+    registerSupplierProfile,
+    removeSupplierOffer,
+    resetSupplierProductForm,
+    saveSupplierOffer,
+    saveSupplierProduct,
+    saveSupplierProfile,
+    selectSupplierProduct,
+    uploadSupplierProductImages,
+  } = createSupplierControllerActions({
+    imageForm,
+    loadFeaturedProducts,
+    loadProducts,
+    productForm,
+    request,
+    selectedSupplierProductId,
+    session,
+    setBusy,
+    setImageForm,
+    setNotice,
+    setProductForm,
+    setSelectedSupplierProductId,
+    setSupplierOrders,
+    setSupplierProducts,
+    setSupplierProfile,
+    setSupplierReports,
+    supplierProfile,
+  });
+
+  const {
+    createHomeComponent,
+    deleteHomeSection,
+    loadHomeContent,
+    moveHomeSection,
+    resetHomeContent,
+    saveHomeContentSettings,
+    toggleFeaturedProduct,
+    toggleHomeComponentProduct,
+    toggleHomeSection,
+    toggleHomeSectionProduct,
+    updateHomeComponentForm,
+    updateHomeHero,
+    updateHomeSection,
+    updateHomeSectionItem,
+    uploadHomeImage,
+  } = createHomeContentControllerActions({
+    homeComponentForm,
+    homeContent,
+    request,
+    session,
+    setBusy,
+    setHomeComponentForm,
+    setHomeContent,
+    setNotice,
+  });
+
+  const {
+    approveAdminProduct,
+    createCategory,
+    createProduct,
+    deleteAdminSupplier,
+    deleteAdminUser,
+    deleteCategory,
+    deleteOrder,
+    deleteProduct,
+    loadAdminProducts,
+    loadAdminSuppliers,
+    loadAdminUsers,
+    openAdminOrder,
+    openAdminUserOrders,
+    rejectAdminProduct,
+    resetCategoryForm,
+    resetProductForm,
+    resetSupplierForm,
+    saveAdminSupplier,
+    saveAdminUser,
+    saveImageUrl,
+    selectAdminCategory,
+    selectAdminProduct,
+    selectAdminSupplier,
+    selectAdminUser,
+    setAdminSearch,
+    setAdminSupplierAction,
+    updateAdminUserForm,
+    updateSupplierForm,
+    uploadProductImages,
+  } = createAdminControllerActions({
+    adminProducts,
+    adminSearch,
+    adminUserForm,
+    categoryForm,
+    imageForm,
+    loadCategories,
+    loadFeaturedProducts,
+    loadOrders,
+    loadProducts,
+    productForm,
+    request,
+    selectedAdminCategoryId,
+    selectedAdminProductId,
+    selectedAdminSupplierId,
+    selectedAdminUserId,
+    session,
+    setAdminProducts,
+    setAdminSearchState,
+    setAdminSuppliers,
+    setAdminUserForm,
+    setAdminUsers,
+    setBusy,
+    setCategoryForm,
+    setImageForm,
+    setNotice,
+    setProductForm,
+    setSelectedAdminCategoryId,
+    setSelectedAdminOrderId,
+    setSelectedAdminProductId,
+    setSelectedAdminSupplierId,
+    setSelectedAdminSupplierKey,
+    setSelectedAdminUserId,
+    setSupplierForm,
+    supplierForm,
+  });
+
   useEffect(() => {
     loadCategories();
     loadFeaturedProducts();
@@ -502,14 +416,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setProductReviews([]);
     }
   }, [routeView]);
-
-  async function loadHomeContent() {
-    try {
-      setHomeContent(await homeContentModel.loadRemote(apiRequest));
-    } catch {
-      setHomeContent(homeContentModel.load());
-    }
-  }
 
   useEffect(() => {
     loadProducts();
@@ -571,370 +477,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }, [session?.accessToken]);
 
-  async function loadCategories() {
-    try {
-      setCategories(await catalogModel.listCategories());
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }
-
-  async function loadProducts() {
-    setLoadingProducts(true);
-    try {
-      const needsLocalFiltering = hasClientSideFilters(filters);
-      const result = await catalogModel.listProducts({
-        page: needsLocalFiltering ? 1 : page,
-        filters,
-        limit: needsLocalFiltering ? 100 : 9,
-      });
-      const filteredProducts = result.products.filter((product) => {
-        const categoryId = typeof product.category === 'object' ? product.category?._id || product.category?.id : product.category;
-        if (filters.categoryGroupIds?.length && !filters.categoryGroupIds.includes(String(categoryId))) return false;
-        if (filters.onlyOffers && !productModel.isOfferActive(product)) return false;
-        if (filters.origin && !productModel.matchesOrigin(product, filters.origin)) return false;
-        if (filters.favoritesOnly && !favoriteIds.includes(getProductId(product))) return false;
-        return true;
-      });
-
-      setProducts(filteredProducts);
-      setPagination(needsLocalFiltering ? { page: 1, totalPages: 1 } : result.pagination);
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setLoadingProducts(false);
-    }
-  }
-
-  async function loadFeaturedProducts() {
-    try {
-      const result = await catalogModel.listProducts({
-        page: 1,
-        filters: { ...emptyFilters, inStock: false },
-        limit: 100,
-      });
-      setFeaturedProducts(result.products);
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }
-
-  async function openProduct(product) {
-    const productId = product?._id || product?.id;
-    if (!productId) return;
-
-    setSelectedProduct(product);
-    setView('product', { productId });
-    setLoadingProductDetail(true);
-    await loadProductReviews(productId);
-    try {
-      const fullProduct = await catalogModel.getProduct(productId);
-      setSelectedProduct(fullProduct);
-      await loadProductReviews(productId);
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setLoadingProductDetail(false);
-    }
-  }
-
-  async function loadProductFromRoute(productId) {
-    if (!productId) return;
-    const selectedId = selectedProduct?._id || selectedProduct?.id;
-    if (String(selectedId || '') === String(productId) && selectedProduct?.name) return;
-
-    setLoadingProductDetail(true);
-    try {
-      const fullProduct = await catalogModel.getProduct(productId);
-      setSelectedProduct(fullProduct);
-      await loadProductReviews(productId);
-    } catch (error) {
-      setNotice(error.message);
-      setSelectedProduct(null);
-    } finally {
-      setLoadingProductDetail(false);
-    }
-  }
-
-  async function loadProductReviews(productId) {
-    try {
-      setProductReviews(await reviewModel.listProduct(productId));
-    } catch (error) {
-      setNotice(error.message);
-      setProductReviews([]);
-    }
-  }
-
-  async function loadMyReviews() {
-    if (!session?.accessToken) return;
-    try {
-      setMyReviews(await reviewModel.listMine(request));
-    } catch {
-      setMyReviews([]);
-    }
-  }
-
-  async function loadAdminReviews() {
-    if (session?.user?.role !== 'admin') return;
-    try {
-      setAdminReviews(await reviewModel.listAll(request));
-    } catch {
-      setAdminReviews([]);
-    }
-  }
-
-  async function loadAdminProducts() {
-    try {
-      if (session?.user?.role === 'admin') {
-        setAdminProducts(await adminModel.listProducts(request));
-        return;
-      }
-
-      const result = await catalogModel.listProducts({
-        page: 1,
-        filters: { ...emptyFilters, inStock: false },
-        limit: 100,
-      });
-      setAdminProducts(result.products);
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }
-
-  async function loadAdminSuppliers() {
-    if (session?.user?.role !== 'admin') return;
-    try {
-      setAdminSuppliers(await adminModel.listSuppliers(request));
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }
-
-  async function loadSupplierPanel() {
-    if (session?.user?.role !== 'supplier') return;
-    try {
-      const [profile, products, salesReport, productsReport, supplierOrderList] = await Promise.all([
-        supplierModel.getProfile(request),
-        supplierModel.listProducts(request),
-        supplierModel.getSalesReport(request).catch(() => null),
-        supplierModel.getProductsReport(request).catch(() => null),
-        supplierModel.listOrders(request).catch(() => []),
-      ]);
-      setSupplierProfile(profile);
-      setSupplierProducts(products);
-      setSupplierReports({ sales: salesReport, products: productsReport });
-      setSupplierOrders(supplierOrderList);
-    } catch (error) {
-      setNotice(error.message);
-      setSupplierProducts([]);
-      setSupplierOrders([]);
-    }
-  }
-
-  async function saveSupplierProfile(form) {
-    if (session?.user?.role !== 'supplier') return;
-
-    setBusy(true);
-    try {
-      const profile = await supplierModel.updateProfile(request, form);
-      setSupplierProfile(profile);
-      setNotice('Perfil de proveedor actualizado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function registerSupplierProfile(form, media = {}) {
-    setBusy(true);
-    setNotice('');
-    try {
-      const result = await supplierModel.register(form);
-      const hasMedia = media.logoFile || media.mainImageFile || media.galleryFiles?.length;
-      if (hasMedia) {
-        const supplierSession = await authModel.login(form.email, form.password);
-        if (media.logoFile) await supplierModel.uploadProfileLogo(supplierSession, media.logoFile);
-        if (media.mainImageFile) await supplierModel.uploadProfileMainImage(supplierSession, media.mainImageFile);
-        if (media.galleryFiles?.length) await supplierModel.uploadProfileGallery(supplierSession, media.galleryFiles);
-      }
-      setNotice(result?.message || 'Tu solicitud de proveedor se ha registrado correctamente.');
-      return result;
-    } catch (error) {
-      setNotice(error.message);
-      throw error;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function resetSupplierProductForm() {
-    setSelectedSupplierProductId('');
-    setProductForm({
-      ...initialProductForm,
-      supplierId: '0',
-      supplierName: supplierProfile?.name || session?.user?.name || '',
-    });
-    setImageForm((current) => ({ ...current, productId: '', files: [], imageUrl: '', imageName: '' }));
-  }
-
-  function selectSupplierProduct(product) {
-    const productId = product?._id || product?.id || '';
-    setSelectedSupplierProductId(productId);
-    setProductForm(getProductFormFromProduct(product, {
-      id: 0,
-      name: supplierProfile?.name || session?.user?.name || '',
-      images: [],
-    }));
-    setImageForm((current) => ({ ...current, productId, files: [], imageUrl: '', imageName: '' }));
-  }
-
-  async function saveSupplierProduct(event, routeProductId = '') {
-    event.preventDefault();
-    if (session?.user?.role !== 'supplier') return;
-
-    setBusy(true);
-    try {
-      const pendingFiles = imageForm.files;
-      const editProductId = routeProductId || selectedSupplierProductId;
-      if (editProductId) {
-        const updated = await supplierModel.updateProduct(request, editProductId, productForm);
-        if (pendingFiles.length) {
-          await supplierModel.uploadProductImages(request, editProductId, pendingFiles);
-        }
-        setSelectedSupplierProductId(editProductId);
-        setProductForm(getProductFormFromProduct(updated, {
-          id: 0,
-          name: supplierProfile?.name || session?.user?.name || '',
-          images: [],
-        }));
-        setImageForm((current) => ({ ...current, productId: editProductId, files: [], imageUrl: '', imageName: '' }));
-        setNotice(pendingFiles.length ? 'Producto e imágenes actualizados correctamente.' : 'Producto actualizado correctamente.');
-      } else {
-        const saved = await supplierModel.createProduct(request, productForm);
-        const savedId = saved._id || saved.id || '';
-        if (savedId && pendingFiles.length) {
-          await supplierModel.uploadProductImages(request, savedId, pendingFiles);
-        }
-        setImageForm((current) => ({ ...current, productId: savedId }));
-        setNotice(pendingFiles.length
-          ? 'Producto creado con imágenes. Queda pendiente de revisión.'
-          : 'Producto creado correctamente. Queda pendiente de revisión.');
-        resetSupplierProductForm();
-      }
-      await loadSupplierPanel();
-      await loadProducts();
-      await loadFeaturedProducts();
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteSupplierProduct(product) {
-    const productId = product?._id || product?.id;
-    if (!productId || session?.user?.role !== 'supplier') return;
-
-    setBusy(true);
-    try {
-      await supplierModel.deleteProduct(request, productId);
-      if (selectedSupplierProductId === productId) resetSupplierProductForm();
-      await loadSupplierPanel();
-      await loadProducts();
-      await loadFeaturedProducts();
-      setNotice('Producto eliminado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function duplicateSupplierProduct(product) {
-    const productId = product?._id || product?.id;
-    if (!productId || session?.user?.role !== 'supplier') return;
-
-    const baseForm = getProductFormFromProduct(product, {
-      id: 0,
-      name: supplierProfile?.name || session?.user?.name || '',
-      images: [],
-    });
-    const suffix = String(Date.now()).slice(-5);
-    const nextSku = [baseForm.sku || 'SKU', 'COPY', suffix].join('-').slice(0, 54);
-
-    setBusy(true);
-    try {
-      await supplierModel.createProduct(request, {
-        ...baseForm,
-        name: (baseForm.name ? baseForm.name + ' copia' : 'Producto copia').slice(0, 120),
-        sku: nextSku,
-        status: 'draft',
-      });
-      await loadSupplierPanel();
-      setNotice('Producto duplicado como borrador.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveSupplierOffer(product, offerFields) {
-    const productId = product?._id || product?.id;
-    if (!productId || session?.user?.role !== 'supplier') return;
-
-    const baseForm = getProductFormFromProduct(product, {
-      id: 0,
-      name: supplierProfile?.name || session?.user?.name || '',
-      images: [],
-    });
-
-    setBusy(true);
-    try {
-      await supplierModel.updateProduct(request, productId, {
-        ...baseForm,
-        ...offerFields,
-      });
-      await loadSupplierPanel();
-      await loadProducts();
-      await loadFeaturedProducts();
-      setNotice('Oferta actualizada correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeSupplierOffer(product) {
-    await saveSupplierOffer(product, {
-      offerType: 'none',
-      offerValue: '',
-      offerBundleQuantity: '3',
-      offerBundlePayQuantity: '2',
-      offerLabel: '',
-      offerValidFrom: '',
-      offerValidUntil: '',
-    });
-  }
-
-  async function loadAdminUsers() {
-    try {
-      setAdminUsers(await adminModel.listUsers(request));
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }
-
-  async function loadCart() {
-    try {
-      setCart(await cartModel.get(request));
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }
-
   async function loadOrders() {
     try {
       if (session?.user?.role === 'admin') {
@@ -944,55 +486,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       }
     } catch {
       setOrders([]);
-    }
-  }
-
-  const updateAccountProfileForm = (field, value) => {
-    setAccountProfileForm((current) => ({ ...current, [field]: value }));
-  };
-
-  async function saveAccountProfile(event) {
-    event.preventDefault();
-    const userId = session?.user?._id || session?.user?.id;
-    if (!userId) return;
-
-    setBusy(true);
-    try {
-      const updated = await userModel.update(request, userId, accountProfileForm);
-      const nextSession = {
-        ...session,
-        user: {
-          ...session.user,
-          ...updated,
-        },
-      };
-      applySession(nextSession);
-      setAccountProfileForm(getAccountProfileDefaults(nextSession));
-      setNotice('Datos de perfil actualizados correctamente.');
-    } catch (error) {
-      setNotice(translateAuthMessage(error.message));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteOwnAccount() {
-    const userId = session?.user?._id || session?.user?.id;
-    if (!userId) return;
-    if (!window.confirm('¿Seguro que quieres eliminar tu cuenta? Esta acción cerrará tu sesión.')) return;
-
-    setBusy(true);
-    try {
-      await userModel.delete(request, userId);
-      applySession(null);
-      setOrders([]);
-      setCart(null);
-      setView('home');
-      setNotice('Tu cuenta se ha eliminado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -1019,310 +512,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         await loadSupplierPanel();
       }
       setNotice('Pedido anulado correctamente. El stock vuelve a estar disponible y queda registrado el abono.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleAuth(event) {
-    event.preventDefault();
-    setBusy(true);
-    setNotice('');
-    setAuthFeedback(null);
-    try {
-      if (authMode === 'login') {
-        const next = await authModel.login(authForm.email, authForm.password);
-        applySession(next);
-        setView(next.user?.role === 'admin' ? 'admin' : next.user?.role === 'supplier' ? 'supplier' : 'catalog');
-        if (next.user?.role === 'supplier') {
-          if (shouldShowSupplierLoginWelcome(next.user)) {
-            setNotice('Hola, ' + (next.user?.name || 'proveedor') + '. Ya tienes tu panel de proveedor preparado.');
-          }
-        } else {
-          setNotice('Hola, ' + (next.user?.name || 'cliente') + '. Todo listo en Mi cuenta.');
-        }
-      } else {
-        if (!authForm.accountType) {
-          setAuthFeedback({ type: 'error', message: 'Elige si quieres darte de alta como cliente o proveedor.' });
-          return;
-        }
-
-        const payload = {
-          name: authForm.name,
-          email: authForm.email,
-          password: authForm.password,
-          phone: authForm.phone,
-          address: {
-            country: authForm.country,
-            street: authForm.street,
-            codePostal: authForm.codePostal,
-            city: authForm.city,
-          },
-        };
-
-        if (authForm.accountType === 'supplier') {
-          const result = await authModel.registerSupplier({
-            ...payload,
-            legalName: authForm.legalName,
-            description: authForm.description,
-          });
-          setAuthMode('login');
-          setAuthForm({ ...initialAuthForm, email: authForm.email });
-          setAuthFeedback({
-            type: 'success',
-            message: result?.message || 'Solicitud de proveedor registrada correctamente. Tu perfil queda pendiente de revisión.',
-          });
-          return;
-        }
-
-        await authModel.register(payload);
-        setAuthMode('login');
-        setAuthForm({ ...initialAuthForm, email: authForm.email });
-        setAuthFeedback({
-          type: 'success',
-          message: 'Cuenta creada correctamente. Revisa el correo para verificarla antes de comprar.',
-        });
-      }
-    } catch (error) {
-      setAuthFeedback({ type: 'error', message: translateAuthMessage(error.message) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleLogout() {
-    setBusy(true);
-    try {
-      await authModel.logout(session?.refreshToken);
-    } catch {
-      // The local session can still be closed even if the server call fails.
-    } finally {
-      applySession(null);
-      setView('catalog');
-      setBusy(false);
-      setNotice('Sesión cerrada');
-    }
-  }
-
-  async function addToCart(product, quantity = 1) {
-    if (!session) {
-      setView('account');
-      setNotice('Inicia sesión para añadir productos al carrito.');
-      return;
-    }
-    if (productModel.getAvailableStock(product, reservedBySku) <= 0) {
-      setNotice('No quedan más unidades disponibles de este producto.');
-      return;
-    }
-    setBusy(true);
-    try {
-      setCart(await cartModel.addItem(request, product, quantity));
-      setNotice(formatNoticeProductName(product.name) + ' añadido al carrito');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function updateCartItem(item, quantity) {
-    if (quantity < 1) return removeCartItem(item);
-    setBusy(true);
-    try {
-      setCart(await cartModel.updateItem(request, item, quantity));
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeCartItem(item) {
-    setBusy(true);
-    try {
-      setCart(await cartModel.removeItem(request, item));
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function clearCart() {
-    setBusy(true);
-    try {
-      setCart(await cartModel.clear(request));
-      setCheckoutStep('items');
-      setCheckoutErrors({});
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const updateShippingForm = (field, value) => {
-    setShippingForm((current) => ({ ...current, [field]: value }));
-    setCheckoutErrors((current) => ({ ...current, [field]: undefined }));
-  };
-
-  const updatePaymentForm = (field, value) => {
-    setPaymentForm((current) => ({ ...current, [field]: value }));
-    setCheckoutErrors((current) => ({ ...current, [field]: undefined }));
-  };
-
-  const updateReviewForm = (field, value) => {
-    setReviewForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const updateAccountReviewForm = (field, value) => {
-    setAccountReviewForm((current) => ({ ...current, [field]: value }));
-  };
-
-  async function submitProductReview(event) {
-    event.preventDefault();
-    const productId = selectedProduct?._id || selectedProduct?.id;
-    if (!session) {
-      setNotice('Entra en tu cuenta para dejar una opinión.');
-      setView('account');
-      return;
-    }
-    if (!productId) return;
-
-    setBusy(true);
-    try {
-      await reviewModel.create(request, productId, reviewForm);
-      setReviewForm({ ...emptyReviewForm });
-      await loadProductReviews(productId);
-      await loadMyReviews();
-      await loadAdminReviews();
-      setNotice('Opinión guardada correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function selectAccountReview(review) {
-    setSelectedAccountReviewId(review?._id || review?.id || '');
-    setAccountReviewForm({
-      rating: Number(review?.rating || 5),
-      title: review?.title || '',
-      comment: review?.comment || '',
-    });
-  }
-
-  async function saveAccountReview(event) {
-    event.preventDefault();
-    if (!selectedAccountReviewId) {
-      setNotice('Selecciona una opinión para modificarla.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await reviewModel.update(request, selectedAccountReviewId, accountReviewForm);
-      setSelectedAccountReviewId('');
-      setAccountReviewForm({ ...emptyReviewForm });
-      await loadMyReviews();
-      await loadAdminReviews();
-      if (selectedProduct?._id || selectedProduct?.id) {
-        await loadProductReviews(selectedProduct._id || selectedProduct.id);
-      }
-      setNotice('Opinión actualizada correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteReview(review) {
-    const reviewId = review?._id || review?.id;
-    if (!reviewId) return;
-
-    setBusy(true);
-    try {
-      await reviewModel.delete(request, reviewId);
-      if (selectedAccountReviewId === reviewId) {
-        setSelectedAccountReviewId('');
-        setAccountReviewForm({ ...emptyReviewForm });
-      }
-      await loadMyReviews();
-      await loadAdminReviews();
-      if (selectedProduct?._id || selectedProduct?.id) {
-        await loadProductReviews(selectedProduct._id || selectedProduct.id);
-      }
-      setNotice('Opinión eliminada correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function goToShipping() {
-    if (!session) {
-      setView('account');
-      setNotice('Inicia sesión para completar el pedido.');
-      return;
-    }
-    if (!cartItems.length) {
-      setNotice('Añade algún producto antes de continuar.');
-      return;
-    }
-    setCheckoutErrors({});
-    setCheckoutStep('shipping');
-  }
-
-  function goToCartItems() {
-    setCheckoutErrors({});
-    setCheckoutStep('items');
-  }
-
-  function goToPayment(event) {
-    event?.preventDefault();
-    const errors = validateShippingForm(shippingForm);
-    if (Object.keys(errors).length) {
-      setCheckoutErrors(errors);
-      setNotice('Revisa la dirección de envío.');
-      return;
-    }
-    setCheckoutErrors({});
-    setCheckoutStep('payment');
-  }
-
-  async function createOrder(event) {
-    event?.preventDefault();
-    if (!cartItems.length || !session?.user?.email) return;
-    const shippingErrors = validateShippingForm(shippingForm);
-    const paymentErrors = validatePaymentForm(paymentForm);
-    if (Object.keys(shippingErrors).length) {
-      setCheckoutErrors(shippingErrors);
-      setCheckoutStep('shipping');
-      setNotice('Revisa la dirección de envío.');
-      return;
-    }
-    if (Object.keys(paymentErrors).length) {
-      setCheckoutErrors(paymentErrors);
-      setCheckoutStep('payment');
-      setNotice('Revisa los datos de pago.');
-      return;
-    }
-    setBusy(true);
-    try {
-      await orderModel.createFromCart(request, session.user.email, cartItems, shippingForm);
-      setCart(await cartModel.clear(request));
-      await loadOrders();
-      await loadProducts();
-      setCheckoutStep('items');
-      setCheckoutErrors({});
-      setPaymentForm({ ...initialPaymentForm });
-      setView('orders');
-      setNotice('Pedido creado correctamente.');
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -1424,26 +613,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setPage(1);
   };
 
-  const updateAuthForm = (field, value) => {
-    setAuthFeedback(null);
-    setAuthForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const chooseAccountType = (accountType) => {
-    setAuthFeedback(null);
-    if (accountType === 'supplier') {
-      setAuthForm((current) => ({ ...current, accountType }));
-      setView('supplierRegister');
-      return;
-    }
-    setAuthForm((current) => ({ ...current, accountType }));
-  };
-
-  const changeAuthMode = (mode) => {
-    setAuthFeedback(null);
-    setAuthMode(mode);
-  };
-
   const updateCategoryForm = (field, value) => {
     setCategoryForm((current) => ({ ...current, [field]: value }));
   };
@@ -1483,695 +652,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }));
     setNotice('Imagen quitada del producto. Guarda el producto para persistir el cambio.');
   };
-
-  const updateHomeHero = (field, value) => {
-    saveHomeContent((current) => ({
-      ...current,
-      hero: {
-        ...current.hero,
-        [field]: value,
-      },
-    }));
-  };
-
-  async function uploadHomeImage(target, files) {
-    const fileList = Array.from(files || []).filter(Boolean);
-    if (!fileList.length) {
-      setNotice('Elige una imagen para subir.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const result = await adminModel.uploadHomeImages(request, fileList.slice(0, 1));
-      const imageUrl = result?.images?.[0]?.url;
-      if (!imageUrl) throw new Error('No se recibió la URL de la imagen.');
-
-      if (target.startsWith('component.')) {
-        updateHomeComponentForm(target.replace('component.', ''), imageUrl);
-        setNotice('Imagen subida y asignada. Añade el componente para guardarla en la portada.');
-        return;
-      }
-
-      const nextHomeContent = homeContentModel.save(assignHomeImage(homeContent, target, imageUrl));
-      setHomeContent(nextHomeContent);
-      const savedHomeContent = await homeContentModel.saveRemote(request, nextHomeContent);
-      setHomeContent(savedHomeContent);
-      setNotice('Imagen subida, asignada y guardada en Atlas.');
-    } catch (error) {
-      setNotice(error.message === 'Internal server error'
-        ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
-        : error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const updateHomeComponentForm = (field, value) => {
-    setHomeComponentForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const toggleHomeComponentProduct = (product) => {
-    const productId = getProductId(product);
-    if (!productId) return;
-    setHomeComponentForm((current) => {
-      const selected = current.productIds.includes(productId);
-      return {
-        ...current,
-        productIds: selected
-          ? current.productIds.filter((id) => id !== productId)
-          : [...current.productIds, productId],
-      };
-    });
-  };
-
-  const updateHomeSection = (sectionId, field, value) => {
-    saveHomeContent((current) => ({
-      ...current,
-      sections: current.sections.map((section) => (
-        section.id === sectionId ? { ...section, [field]: value } : section
-      )),
-    }));
-  };
-
-  const updateHomeSectionItem = (sectionId, itemIndex, field, value) => {
-    saveHomeContent((current) => ({
-      ...current,
-      sections: current.sections.map((section) => {
-        if (section.id !== sectionId) return section;
-        const items = [...(Array.isArray(section.items) ? section.items : [])];
-        items[itemIndex] = {
-          title: '',
-          body: '',
-          imageUrl: '',
-          linkUrl: '',
-          ...(items[itemIndex] || {}),
-          [field]: value,
-        };
-        return { ...section, items };
-      }),
-    }));
-  };
-
-  const toggleHomeSectionProduct = (sectionId, product) => {
-    const productId = getProductId(product);
-    if (!productId) return;
-    saveHomeContent((current) => ({
-      ...current,
-      sections: current.sections.map((section) => {
-        if (section.id !== sectionId) return section;
-        const productIds = Array.isArray(section.productIds) ? section.productIds : [];
-        const selected = productIds.includes(productId);
-        return {
-          ...section,
-          productIds: selected
-            ? productIds.filter((id) => id !== productId)
-            : [...productIds, productId],
-        };
-      }),
-    }));
-  };
-
-  const toggleHomeSection = (sectionId) => {
-    saveHomeContent((current) => ({
-      ...current,
-      sections: current.sections.map((section) => (
-        section.id === sectionId ? { ...section, enabled: !section.enabled } : section
-      )),
-    }));
-  };
-
-  const moveHomeSection = (sectionId, direction) => {
-    saveHomeContent((current) => {
-      const sections = [...current.sections].sort((first, second) => first.order - second.order);
-      const index = sections.findIndex((section) => section.id === sectionId);
-      const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= sections.length) return current;
-      const [section] = sections.splice(index, 1);
-      sections.splice(nextIndex, 0, section);
-      return {
-        ...current,
-        sections: sections.map((item, order) => ({ ...item, order })),
-      };
-    });
-  };
-
-  const deleteHomeSection = (sectionId) => {
-    saveHomeContent((current) => ({
-      ...current,
-      sections: current.sections
-        .filter((section) => section.id !== sectionId)
-        .map((section, order) => ({ ...section, order })),
-    }));
-  };
-
-  const toggleFeaturedProduct = (product) => {
-    const productId = getProductId(product);
-    if (!productId) return;
-    saveHomeContent((current) => {
-      const selected = current.featuredProductIds.includes(productId);
-      return {
-        ...current,
-        featuredProductIds: selected
-          ? current.featuredProductIds.filter((id) => id !== productId)
-          : [...current.featuredProductIds, productId],
-      };
-    });
-  };
-
-  const createHomeComponent = (event) => {
-    event.preventDefault();
-    const title = homeComponentForm.title.trim();
-    if (!title) {
-      setNotice('Indica un titulo para el componente.');
-      return;
-    }
-    const bannerItems = [
-      {
-        title: homeComponentForm.itemOneTitle.trim(),
-        body: homeComponentForm.itemOneBody.trim(),
-        imageUrl: homeComponentForm.itemOneImageUrl.trim(),
-        linkUrl: homeComponentForm.itemOneLinkUrl.trim(),
-      },
-      {
-        title: homeComponentForm.itemTwoTitle.trim(),
-        body: homeComponentForm.itemTwoBody.trim(),
-        imageUrl: homeComponentForm.itemTwoImageUrl.trim(),
-        linkUrl: homeComponentForm.itemTwoLinkUrl.trim(),
-      },
-      {
-        title: homeComponentForm.itemThreeTitle.trim(),
-        body: homeComponentForm.itemThreeBody.trim(),
-        imageUrl: homeComponentForm.itemThreeImageUrl.trim(),
-        linkUrl: homeComponentForm.itemThreeLinkUrl.trim(),
-      },
-    ].filter((item) => item.title || item.body || item.imageUrl || item.linkUrl);
-
-    saveHomeContent((current) => ({
-      ...current,
-      sections: [
-        ...current.sections,
-        {
-          id: 'custom-' + Date.now(),
-          type: homeComponentForm.type,
-          title,
-          subtitle: homeComponentForm.subtitle.trim(),
-          body: homeComponentForm.body.trim(),
-          ctaLabel: homeComponentForm.ctaLabel.trim(),
-          imageUrl: homeComponentForm.imageUrl.trim(),
-          items: bannerItems,
-          linkUrl: homeComponentForm.linkUrl.trim(),
-          productIds: homeComponentForm.productIds,
-          enabled: true,
-          locked: false,
-          order: current.sections.length,
-        },
-      ],
-    }));
-    setHomeComponentForm({ ...initialHomeComponentForm });
-    setNotice('Componente anadido a la portada.');
-  };
-
-  const resetHomeContent = () => {
-    saveHomeContent(homeContentModel.getDefault());
-    setHomeComponentForm({ ...initialHomeComponentForm });
-    setNotice('Portada restablecida.');
-  };
-
-  async function saveHomeContentSettings() {
-    if (session?.user?.role !== 'admin') return;
-    setBusy(true);
-    try {
-      setHomeContent(await homeContentModel.saveRemote(request, homeContent));
-      setNotice('Portada guardada en Atlas.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const updateAdminUserForm = (field, value) => {
-    setAdminUserForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const updateSupplierForm = (field, value) => {
-    setSupplierForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const setAdminSearch = (key, value) => {
-    setAdminSearchState((current) => ({ ...current, [key]: value }));
-  };
-
-  function selectAdminCategory(category) {
-    setSelectedAdminCategoryId(category?._id || category?.id || '');
-    setCategoryForm({
-      name: category?.name || '',
-      description: category?.description || '',
-    });
-  }
-
-  function resetCategoryForm() {
-    setSelectedAdminCategoryId('');
-    setCategoryForm({ ...initialCategoryForm });
-  }
-
-  function selectAdminProduct(product) {
-    setSelectedAdminProductId(product?._id || product?.id || '');
-    setProductForm(getProductFormFromProduct(product));
-    if (product?._id || product?.id) {
-      setImageForm((current) => ({ ...current, productId: product._id || product.id }));
-    }
-  }
-
-  function resetProductForm() {
-    setSelectedAdminProductId('');
-    setProductForm({ ...initialProductForm });
-    setImageForm({ ...initialImageForm });
-  }
-
-  async function selectAdminSupplier(supplier) {
-    const supplierId = supplier?._id || supplier?.id || '';
-    const key = getSupplierKey(supplier);
-    setSelectedAdminSupplierId(supplierId);
-    setSelectedAdminSupplierKey(key);
-    setSupplierForm({
-      name: supplier?.name || '',
-      legalName: supplier?.legalName || '',
-      phone: supplier?.phone || '',
-      status: supplier?.status || '',
-      featured: Boolean(supplier?.featured),
-      internalNotes: supplier?.internalNotes || '',
-      rejectionReason: supplier?.rejectionReason || '',
-    });
-
-    if (!supplierId) return;
-    setBusy(true);
-    try {
-      const detail = await adminModel.getSupplier(request, supplierId);
-      setAdminSuppliers((current) => current.map((item) => (
-        (item._id || item.id) === supplierId ? { ...item, ...detail } : item
-      )));
-      setSupplierForm({
-        name: detail?.name || '',
-        legalName: detail?.legalName || '',
-        phone: detail?.phone || '',
-        status: detail?.status || '',
-        featured: Boolean(detail?.featured),
-        internalNotes: detail?.internalNotes || '',
-        rejectionReason: detail?.rejectionReason || '',
-      });
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function resetSupplierForm() {
-    setSelectedAdminSupplierId('');
-    setSelectedAdminSupplierKey('');
-    setSupplierForm({ ...initialSupplierForm });
-  }
-
-  async function refreshSelectedSupplier(supplierId = selectedAdminSupplierId) {
-    await loadAdminSuppliers();
-    if (!supplierId) return;
-    try {
-      const detail = await adminModel.getSupplier(request, supplierId);
-      setAdminSuppliers((current) => {
-        const exists = current.some((item) => (item._id || item.id) === supplierId);
-        return exists
-          ? current.map((item) => ((item._id || item.id) === supplierId ? { ...item, ...detail } : item))
-          : [detail, ...current];
-      });
-      setSupplierForm({
-        name: detail?.name || '',
-        legalName: detail?.legalName || '',
-        phone: detail?.phone || '',
-        status: detail?.status || '',
-        featured: Boolean(detail?.featured),
-        internalNotes: detail?.internalNotes || '',
-        rejectionReason: detail?.rejectionReason || '',
-      });
-    } catch {
-      // La lista ya se ha refrescado; si falla el detalle no bloqueamos la vista.
-    }
-  }
-
-  async function setAdminSupplierAction(action, options = {}) {
-    if (!selectedAdminSupplierId) {
-      setNotice('Selecciona un proveedor para gestionarlo.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      if (action === 'approve') await adminModel.approveSupplier(request, selectedAdminSupplierId);
-      if (action === 'reject') await adminModel.rejectSupplier(request, selectedAdminSupplierId, options.reason || supplierForm.rejectionReason || '');
-      if (action === 'deactivate') await adminModel.deactivateSupplier(request, selectedAdminSupplierId);
-      if (action === 'reactivate') await adminModel.reactivateSupplier(request, selectedAdminSupplierId);
-      if (action === 'featured') await adminModel.setSupplierFeatured(request, selectedAdminSupplierId, options.featured);
-      await refreshSelectedSupplier(selectedAdminSupplierId);
-      await loadAdminProducts();
-      await loadProducts();
-      setNotice('Proveedor actualizado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveAdminSupplier(event) {
-    event.preventDefault();
-    if (!selectedAdminSupplierId) {
-      setNotice('Selecciona un proveedor para editarlo.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await adminModel.setSupplierInternalNotes(request, selectedAdminSupplierId, supplierForm.internalNotes);
-      await adminModel.setSupplierFeatured(request, selectedAdminSupplierId, Boolean(supplierForm.featured));
-      await refreshSelectedSupplier(selectedAdminSupplierId);
-      setNotice('Notas y destacado del proveedor guardados.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteAdminSupplier() {
-    if (!selectedAdminSupplierId) {
-      setNotice('Selecciona un proveedor para eliminarlo.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await adminModel.deleteSupplier(request, selectedAdminSupplierId);
-      resetSupplierForm();
-      await loadAdminSuppliers();
-      await loadAdminProducts();
-      await loadProducts();
-      setNotice('Proveedor eliminado de la base de datos.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function selectAdminUser(user) {
-    const userId = user?._id || user?.id || '';
-    setSelectedAdminUserId(userId);
-    setSelectedAdminOrderId('');
-    setAdminUserForm({
-      name: user?.name || '',
-      email: user?.email || '',
-      phone: user?.phone || '',
-      street: user?.address?.street || '',
-      codePostal: user?.address?.codePostal || '',
-      city: user?.address?.city || '',
-      country: user?.address?.country || '',
-      role: user?.role || 'user',
-      password: '',
-    });
-  }
-
-  function openAdminUserOrders(user) {
-    selectAdminUser(user);
-    setSelectedAdminOrderId('');
-  }
-
-  function openAdminOrder(order) {
-    setSelectedAdminOrderId(order?._id || order?.id || '');
-  }
-
-  async function saveAdminUser(event) {
-    event.preventDefault();
-    if (!selectedAdminUserId) {
-      setNotice('Selecciona un usuario para editarlo.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const updated = await adminModel.updateUser(request, selectedAdminUserId, adminUserForm);
-      await loadAdminUsers();
-      selectAdminUser(updated);
-      setNotice('Usuario actualizado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteAdminUser(user) {
-    const userId = user?._id || user?.id;
-    if (!userId) return;
-    if (String(userId) === String(session?.user?._id || session?.user?.id)) {
-      setNotice('No puedes eliminar tu propio usuario administrador desde aquí.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await adminModel.deleteUser(request, userId);
-      await loadAdminUsers();
-      if (selectedAdminUserId === userId) {
-        setSelectedAdminUserId('');
-        setSelectedAdminOrderId('');
-        setAdminUserForm({ ...initialAdminUserForm });
-      }
-      setNotice('Usuario eliminado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createCategory(event) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      if (selectedAdminCategoryId) {
-        await adminModel.updateCategory(request, selectedAdminCategoryId, categoryForm);
-        setNotice('Categoría actualizada correctamente.');
-      } else {
-        await adminModel.createCategory(request, categoryForm);
-        setNotice('Categoría creada correctamente.');
-      }
-      resetCategoryForm();
-      await loadCategories();
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteCategory(category) {
-    const categoryId = category?._id || category?.id;
-    if (!categoryId) return;
-
-    setBusy(true);
-    try {
-      await adminModel.deleteCategory(request, categoryId);
-      if (selectedAdminCategoryId === categoryId) resetCategoryForm();
-      await loadCategories();
-      setNotice('Categoría eliminada correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createProduct(event) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const saved = selectedAdminProductId
-        ? await adminModel.updateProduct(request, selectedAdminProductId, productForm)
-        : await adminModel.createProduct(request, productForm);
-      setImageForm((current) => ({ ...current, productId: saved._id || saved.id || '' }));
-      resetProductForm();
-      await loadProducts();
-      await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice(selectedAdminProductId ? 'Producto actualizado correctamente.' : 'Producto creado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteProduct(product) {
-    const productId = product?._id || product?.id;
-    if (!productId) return;
-
-    setBusy(true);
-    try {
-      await adminModel.deleteProduct(request, productId);
-      if (selectedAdminProductId === productId) resetProductForm();
-      await loadProducts();
-      await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice('Producto eliminado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function approveAdminProduct(product) {
-    const productId = product?._id || product?.id;
-    if (!productId || session?.user?.role !== 'admin') return;
-
-    setBusy(true);
-    try {
-      await adminModel.approveProduct(request, productId);
-      await loadProducts();
-      await loadFeaturedProducts();
-      await loadAdminProducts();
-      await loadAdminSuppliers();
-      setNotice('Producto aprobado y publicado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function rejectAdminProduct(product) {
-    const productId = product?._id || product?.id;
-    if (!productId || session?.user?.role !== 'admin') return;
-    const reason = window.prompt('Indica el motivo del rechazo para que el proveedor pueda corregirlo:');
-    if (reason == null) return;
-    if (reason.trim().length < 3) {
-      setNotice('Indica un motivo claro para rechazar el producto.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await adminModel.rejectProduct(request, productId, reason.trim());
-      await loadProducts();
-      await loadFeaturedProducts();
-      await loadAdminProducts();
-      await loadAdminSuppliers();
-      setNotice('Producto rechazado. El proveedor verá el motivo para corregirlo.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function uploadProductImages(event) {
-    event.preventDefault();
-    if (!imageForm.productId || imageForm.files.length === 0) {
-      setNotice('Elige un producto y al menos una imagen.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const updated = await adminModel.uploadProductImages(request, imageForm.productId, imageForm.files);
-      setImageForm({ ...initialImageForm, productId: imageForm.productId });
-      setProductForm((current) => ({
-        ...current,
-        images: Array.isArray(updated?.images) ? updated.images : current.images,
-      }));
-      await loadProducts();
-      await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice('Imágenes subidas correctamente.');
-    } catch (error) {
-      setNotice(error.message === 'Internal server error'
-        ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
-        : error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function uploadSupplierProductImages(event) {
-    event.preventDefault();
-    const productId = selectedSupplierProductId || imageForm.productId;
-    if (!productId || imageForm.files.length === 0) {
-      setNotice('Elige un producto propio y al menos una imagen.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const updated = await supplierModel.uploadProductImages(request, productId, imageForm.files);
-      setImageForm({ ...initialImageForm, productId });
-      setProductForm((current) => ({
-        ...current,
-        images: Array.isArray(updated?.images) ? updated.images : current.images,
-      }));
-      await loadSupplierPanel();
-      await loadProducts();
-      await loadFeaturedProducts();
-      setNotice('Imágenes subidas correctamente.');
-    } catch (error) {
-      setNotice(error.message === 'Internal server error'
-        ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
-        : error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveImageUrl(event) {
-    event.preventDefault();
-    const product = adminProducts.find((item) => (item._id || item.id) === imageForm.productId);
-    if (!product || !imageForm.imageUrl.trim()) {
-      setNotice('Elige un producto y pega una URL de imagen válida.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await adminModel.saveImageUrl(request, product, imageForm.imageUrl, imageForm.imageName);
-      setImageForm({ ...initialImageForm, productId: imageForm.productId });
-      await loadProducts();
-      await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice('Imagen guardada desde URL.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteOrder(order) {
-    const orderId = order._id || order.id;
-    if (!orderId || session?.user?.role !== 'admin') return;
-
-    setBusy(true);
-    try {
-      await orderModel.delete(request, orderId);
-      await loadOrders();
-      await loadProducts();
-      await loadFeaturedProducts();
-      setNotice('Pedido eliminado y stock repuesto.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return {
     state: {

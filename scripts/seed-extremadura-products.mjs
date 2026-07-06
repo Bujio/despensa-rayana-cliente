@@ -350,6 +350,7 @@ async function createProducts(token, categoryMap) {
   for (const product of seed.products) {
     const { categoryName, ...payload } = product;
     payload.category = categoryMap.get(categoryName);
+    payload.shortDescription = payload.description.slice(0, 140);
 
     try {
       await request('/products', {
@@ -364,8 +365,7 @@ async function createProducts(token, categoryMap) {
     }
   }
 
-  console.log('
-Resultado:', created, 'creados,', skipped, 'omitidos.');
+  console.log('\nResultado:', created, 'creados,', skipped, 'omitidos.');
 }
 
 const token = await getToken();
