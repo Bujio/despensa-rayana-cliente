@@ -21,7 +21,9 @@ The visual direction combines contemporary ecommerce patterns with the identity 
 - React 19
 - Vite 7
 - Lucide React icons
+- DOMPurify for sanitized rich product descriptions
 - CSS custom properties and responsive CSS
+- ESLint 9 with React, React Hooks, and JSX accessibility rules
 - REST API integration through `VITE_API_URL`
 
 ## Project Structure
@@ -68,6 +70,12 @@ Build for production:
 npm run build
 ```
 
+Run static checks:
+
+```bash
+npm run lint
+```
+
 Preview the production build:
 
 ```bash
@@ -93,11 +101,24 @@ Product cards and product detail pages are designed to display images associated
 ## Available Scripts
 
 ```bash
-npm run dev
-npm run build
-npm run preview
-npm run seed:extremadura
+npm run dev                # Start the Vite development server
+npm run build              # Build the production bundle
+npm run preview            # Preview the production build locally
+npm run lint               # Run ESLint over the frontend source
+npm run audit              # Run npm audit with moderate severity threshold
+npm run seed:extremadura   # Seed the backend API with the Extremadura catalogue
 ```
+
+## Quality Checks
+
+Before committing frontend changes, run:
+
+```bash
+npm run lint
+npm run build
+```
+
+The lint setup includes React Hooks and accessibility checks. Some existing hook dependency and unused-variable warnings may still appear while larger controller/view modules are being split, but lint exits successfully when there are no blocking errors.
 
 ## Repository Hygiene
 
