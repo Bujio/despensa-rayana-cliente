@@ -103,7 +103,12 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
         ))}
       </nav>
 
-      <div className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')} onClick={() => setMenuOpen(false)} />
+      <button
+        className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')}
+        type="button"
+        onClick={() => setMenuOpen(false)}
+        aria-label="Cerrar menú"
+      />
       <aside className={'mobile-menu' + (menuOpen ? ' open' : '')} aria-hidden={!menuOpen}>
         <div className="mobile-menu-head">
           <strong>La Despensa Rayana</strong>

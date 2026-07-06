@@ -21,7 +21,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
   };
 
   return (
-    <article
+    <div
       className="product-card ecommerce-card"
       onClick={openProduct}
       onKeyDown={openProduct}
@@ -83,6 +83,6 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
           </button>
         </div>
       </div>
-    </article>
+    </div>
   );
 }
