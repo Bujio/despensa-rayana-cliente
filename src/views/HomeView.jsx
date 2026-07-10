@@ -73,7 +73,7 @@ function ProductCarouselSection({
           <button className="carousel-control" type="button" onClick={() => scroll(-1)} aria-label="Ver productos anteriores">
             <ChevronLeft size={18} />
           </button>
-          <div className="featured-carousel" ref={carouselRef} tabIndex={0} aria-label={section.title}>
+          <div className="featured-carousel" ref={carouselRef} aria-label={section.title}>
             {sectionProducts.map((product) => (
               <ProductCard
                 key={product._id || product.id || product.sku}
@@ -290,7 +290,7 @@ export function HomeView({ state, actions }) {
             <button className="carousel-control" type="button" onClick={() => scrollFeatured(-1)} aria-label="Ver productos anteriores">
               <ChevronLeft size={18} />
             </button>
-            <div className="featured-carousel" ref={featuredCarouselRef} tabIndex={0} aria-label="Productos destacados">
+            <div className="featured-carousel" ref={featuredCarouselRef} aria-label="Productos destacados">
               {carouselProducts.map((product) => (
                 <ProductCard
                   key={product._id || product.id || product.sku}
