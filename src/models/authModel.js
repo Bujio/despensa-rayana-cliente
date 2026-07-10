@@ -31,6 +31,26 @@ export const authModel = {
       null,
     );
   },
+  requestPasswordReset(email) {
+    return apiRequest(
+      '/auth/password-reset/request',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      },
+      null,
+    );
+  },
+  resetPassword(token, password) {
+    return apiRequest(
+      '/auth/password-reset/confirm',
+      {
+        method: 'POST',
+        body: JSON.stringify({ token, password }),
+      },
+      null,
+    );
+  },
   async logout(refreshToken) {
     if (!refreshToken) return;
     await apiRequest(

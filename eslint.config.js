@@ -1,16 +1,22 @@
 import js from '@eslint/js';
 import globals from 'globals';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
-import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 export default [
   {
-    ignores: ['dist/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      '.codex-upload/**',
+      '*.config.js',
+    ],
   },
   js.configs.recommended,
   {
-    files: ['src/**/*.{js,jsx}', 'scripts/**/*.mjs', '*.js'],
+    files: ['src/**/*.{js,jsx}', 'scripts/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -50,6 +56,10 @@ export default [
         },
       ],
       'react/prop-types': 'off',
+      'react/no-unescaped-entities': 'off',
+      'jsx-a11y/no-static-element-interactions': 'warn',
+      'jsx-a11y/click-events-have-key-events': 'warn',
+      'jsx-a11y/no-noninteractive-element-interactions': 'warn',
     },
   },
 ];

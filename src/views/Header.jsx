@@ -13,7 +13,7 @@ const commerceSections = [
   'La Rayana',
 ];
 
-export function Header({ cartCount, cartFeedback, busy, filters, session, view, onCommerceCategory, onDismissCartFeedback, onFavorites, onLogout, onSearch, onViewChange }) {
+export function Header({ cartCount, cartFeedback, busy, filters, session, onCommerceCategory, onDismissCartFeedback, onFavorites, onLogout, onSearch, onViewChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -42,7 +42,7 @@ export function Header({ cartCount, cartFeedback, busy, filters, session, view, 
     <header className="site-header">
       <div className="announcement-bar">
         <span>Envíos a toda España peninsular en 24/48h</span>
-        <span>Productos de origen extremeño</span>
+        <span>Productos de origen rayano</span>
       </div>
 
       <div className="topbar">

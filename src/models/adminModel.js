@@ -219,6 +219,16 @@ export const adminModel = {
     });
   },
 
+  listHomeContentRevisions(request) {
+    return request('/home-content/admin/revisions?limit=12');
+  },
+
+  restoreHomeContentRevision(request, revisionId) {
+    return request('/home-content/admin/revisions/' + revisionId + '/restore', {
+      method: 'PATCH',
+    });
+  },
+
   saveImageUrl(request, product, imageUrl, imageName) {
     const currentImages = Array.isArray(product.images) ? product.images : [];
     const nextImage = {

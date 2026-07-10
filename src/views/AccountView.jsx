@@ -5,6 +5,7 @@ import {
   PackagePlus,
   RotateCcw,
   Save,
+  Send,
   ShoppingBag,
   Star,
   Store,
@@ -93,9 +94,97 @@ function AccountOrdersPanel({ busy, orders, actions }) {
   );
 }
 
+function getThreadId(thread) {
+  return thread?._id || thread?.id || '';
+}
+
+function getThreadProductName(thread) {
+  return formatProductName(thread?.product?.name) || 'Producto';
+}
+
+function getLastThreadMessage(thread) {
+  const messages = thread?.messages || [];
+  return thread?.lastMessage || messages[messages.length - 1] || null;
+}
+
+function AccountMessagesPanel({ busy, messages, replyForm, selectedId, actions }) {
+  const selectedThread = messages.find((thread) => getThreadId(thread) === selectedId) || messages[0] || null;
+
+  useEffect(() => {
+    if (!selectedId && selectedThread) {
+      actions.selectAccountSupplierMessage(selectedThread);
+    }
+  }, [selectedId, selectedThread?._id, selectedThread?.id]);
+
+  return (
+    <section className="account-messages-workspace">
+      <div className="wide-panel account-message-list-panel">
+        <div className="admin-panel-title"><MessageSquare size={19} /> Mensajes con proveedores</div>
+        {messages.length ? messages.map((thread) => {
+          const threadId = getThreadId(thread);
+          const lastMessage = getLastThreadMessage(thread);
+          return (
+            <button
+              className={'message-thread-row' + (threadId === getThreadId(selectedThread) ? ' active' : '')}
+              type="button"
+              key={threadId}
+              onClick={() => actions.selectAccountSupplierMessage(thread)}
+            >
+              <span>
+                <strong>{getThreadProductName(thread)}</strong>
+                <small>{thread.supplier?.name || 'Proveedor'}</small>
+              </span>
+              <span>{lastMessage?.body || thread.subject || 'Consulta enviada'}</span>
+              {thread.customerUnread && <em>Nuevo</em>}
+            </button>
+          );
+        }) : (
+          <div className="empty-state compact-empty">Todavía no has enviado mensajes a proveedores.</div>
+        )}
+      </div>
+
+      <form className="wide-panel message-thread-detail" onSubmit={actions.replyAccountSupplierMessage}>
+        <div className="admin-panel-title"><Send size={19} /> Conversación</div>
+        {selectedThread ? (
+          <>
+            <div className="message-thread-heading">
+              <strong>{selectedThread.subject || getThreadProductName(selectedThread)}</strong>
+              <span>{selectedThread.supplier?.name || 'Proveedor'} · {getThreadProductName(selectedThread)}</span>
+            </div>
+            <div className="message-bubble-list">
+              {(selectedThread.messages || []).map((message) => (
+                <article className={'message-bubble ' + (message.senderRole === 'user' ? 'own' : 'other')} key={message._id || message.createdAt}>
+                  <strong>{message.senderRole === 'user' ? 'Tú' : selectedThread.supplier?.name || 'Proveedor'}</strong>
+                  <p>{message.body}</p>
+                  {message.createdAt && <small>{new Date(message.createdAt).toLocaleString('es-ES')}</small>}
+                </article>
+              ))}
+            </div>
+            <label>
+              Responder
+              <textarea
+                required
+                minLength="3"
+                value={replyForm.message}
+                onChange={(event) => actions.updateAccountMessageReplyForm('message', event.target.value)}
+                placeholder="Escribe una respuesta para el proveedor"
+              />
+            </label>
+            <button className="primary full" type="submit" disabled={busy}><Send size={18} /> Enviar respuesta</button>
+          </>
+        ) : (
+          <div className="empty-state compact-empty">Selecciona una conversación.</div>
+        )}
+      </form>
+    </section>
+  );
+}
+
 export function AccountView({ state, actions, forceRegister = false }) {
   const {
     accountProfileForm,
+    accountMessageReplyForm,
+    accountSupplierMessages = [],
     accountReviewForm,
     authFeedback,
     authForm,
@@ -104,6 +193,7 @@ export function AccountView({ state, actions, forceRegister = false }) {
     myReviews = [],
     orders = [],
     selectedAccountReviewId,
+    selectedAccountMessageId,
     session,
   } = state;
   const [accountSection, setAccountSection] = useState('profile');
@@ -123,6 +213,7 @@ export function AccountView({ state, actions, forceRegister = false }) {
     const accountNav = [
       ['profile', UserRound, 'Mi perfil', 'Datos personales y dirección'],
       ['orders', ShoppingBag, 'Mis pedidos', orders.length + ' pedidos'],
+      ['messages', MessageSquare, 'Mensajes', accountSupplierMessages.length + ' conversaciones'],
       ['reviews', MessageSquare, 'Mis valoraciones', myReviews.length + ' opiniones'],
     ];
 
@@ -163,13 +254,15 @@ export function AccountView({ state, actions, forceRegister = false }) {
         <div className="account-panel-main">
           <div className="section-heading compact account-panel-heading">
             <div>
-              <h1>{accountSection === 'profile' ? 'Mi perfil' : accountSection === 'orders' ? 'Mis pedidos' : 'Mis valoraciones'}</h1>
+              <h1>{accountSection === 'profile' ? 'Mi perfil' : accountSection === 'orders' ? 'Mis pedidos' : accountSection === 'messages' ? 'Mensajes' : 'Mis valoraciones'}</h1>
               <p>
                 {accountSection === 'profile'
                   ? 'Consulta y modifica tus datos de cliente.'
                   : accountSection === 'orders'
                     ? 'Revisa tus compras y anula pedidos pendientes.'
-                    : 'Gestiona las opiniones que has publicado.'}
+                    : accountSection === 'messages'
+                      ? 'Consulta y responde los mensajes que has enviado a proveedores.'
+                      : 'Gestiona las opiniones que has publicado.'}
               </p>
             </div>
           </div>
@@ -206,6 +299,16 @@ export function AccountView({ state, actions, forceRegister = false }) {
 
           {accountSection === 'orders' && (
             <AccountOrdersPanel busy={busy} orders={orders} actions={actions} />
+          )}
+
+          {accountSection === 'messages' && (
+            <AccountMessagesPanel
+              busy={busy}
+              messages={accountSupplierMessages}
+              replyForm={accountMessageReplyForm}
+              selectedId={selectedAccountMessageId}
+              actions={actions}
+            />
           )}
 
           {accountSection === 'reviews' && (
@@ -275,9 +378,18 @@ export function AccountView({ state, actions, forceRegister = false }) {
   }
 
   const isRegister = authMode === 'register';
+  const isForgot = authMode === 'forgot';
+  const isReset = authMode === 'reset';
   const selectedType = authForm.accountType;
   const isSupplierRegister = isRegister && selectedType === 'supplier';
   const isCustomerRegister = isRegister && selectedType === 'customer';
+  const authTitle = authMode === 'login'
+    ? 'Accede a tu cuenta'
+    : isForgot
+      ? 'Recuperar contraseña'
+      : isReset
+        ? 'Crear nueva contraseña'
+        : 'Nueva cuenta';
 
   return (
     <section className="account-view">
@@ -288,10 +400,12 @@ export function AccountView({ state, actions, forceRegister = false }) {
             <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => actions.setAuthMode('register')}>Crear cuenta</button>
           </div>
           <div className="auth-heading-block">
-            <h1>{authMode === 'login' ? 'Accede a tu cuenta' : 'Nueva cuenta'}</h1>
+            <h1>{authTitle}</h1>
             {isRegister && (
               <p>{selectedType ? 'Completa los datos para finalizar el alta.' : 'Elige primero cómo quieres darte de alta.'}</p>
             )}
+            {isForgot && <p>Te enviaremos un enlace para crear una nueva contraseña si el email está registrado.</p>}
+            {isReset && <p>Elige una contraseña nueva para volver a entrar en tu cuenta.</p>}
           </div>
         </div>
 
@@ -314,6 +428,41 @@ export function AccountView({ state, actions, forceRegister = false }) {
           <button className="text-link-button auth-back-button" type="button" onClick={() => actions.chooseAccountType('')}>
             <ArrowLeft size={16} /> Cambiar tipo de alta
           </button>
+        )}
+
+        {isForgot && (
+          <div className="auth-form-fields">
+            <label>Email<input type="email" required value={authForm.email} onChange={update('email')} /></label>
+            <button className="primary full" type="submit" disabled={busy}>
+              <UserRound size={18} /> Enviar enlace
+            </button>
+            {authFeedback?.message && (
+              <p className={'form-feedback ' + authFeedback.type} role={authFeedback.type === 'error' ? 'alert' : 'status'}>
+                {authFeedback.message}
+              </p>
+            )}
+            <button className="text-link-button auth-inline-link" type="button" onClick={() => actions.setAuthMode('login')}>
+              Volver a entrar
+            </button>
+          </div>
+        )}
+
+        {isReset && (
+          <div className="auth-form-fields">
+            <label>Nueva contraseña<input type="password" required value={authForm.password} onChange={update('password')} /></label>
+            <label>Repetir contraseña<input type="password" required value={authForm.confirmPassword} onChange={update('confirmPassword')} /></label>
+            <button className="primary full" type="submit" disabled={busy}>
+              <UserRound size={18} /> Guardar contraseña
+            </button>
+            {authFeedback?.message && (
+              <p className={'form-feedback ' + authFeedback.type} role={authFeedback.type === 'error' ? 'alert' : 'status'}>
+                {authFeedback.message}
+              </p>
+            )}
+            <button className="text-link-button auth-inline-link" type="button" onClick={() => actions.setAuthMode('login')}>
+              Volver a entrar
+            </button>
+          </div>
         )}
 
         {(authMode === 'login' || isCustomerRegister || isSupplierRegister) && (
@@ -349,6 +498,11 @@ export function AccountView({ state, actions, forceRegister = false }) {
               <p className={'form-feedback ' + authFeedback.type} role={authFeedback.type === 'error' ? 'alert' : 'status'}>
                 {authFeedback.message}
               </p>
+            )}
+            {authMode === 'login' && (
+              <button className="text-link-button auth-inline-link" type="button" onClick={() => actions.setAuthMode('forgot')}>
+                He olvidado mi contraseña
+              </button>
             )}
           </div>
         )}

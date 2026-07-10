@@ -14,21 +14,20 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
   const supplierName = product?.supplier?.name || product?.supplierRef?.name || product?.supplierName || 'La Despensa Rayana';
   const productName = formatProductName(product?.name);
 
-  const openProduct = (event) => {
-    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
+  const openProduct = () => {
     onOpen?.(product);
   };
 
   return (
     <article
       className="product-card ecommerce-card"
-      onClick={openProduct}
-      onKeyDown={openProduct}
-      role="link"
-      tabIndex={0}
-      aria-label={'Ver producto ' + productName}
     >
+      <button
+        className="product-card-open-hitbox"
+        type="button"
+        onClick={openProduct}
+        aria-label={'Ver producto ' + productName}
+      />
       <div className="product-media">
         {image && !imageFailed ? (
           <img src={image} alt={productName} loading="lazy" onError={() => setImageFailed(true)} />
