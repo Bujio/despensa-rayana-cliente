@@ -610,8 +610,16 @@ function SupplierProfile({ state, actions }) {
       <section className="admin-panel">
         <div className="admin-panel-title"><Store size={18} /> Información básica</div>
         <div className="admin-form-grid">
-          <label>Código proveedor<input readOnly value={profile.supplierCode || ''} /></label>
-          <label>Estado<input readOnly value={getSupplierStatusLabel(profile.status)} /></label>
+          <label className="readonly-field">
+            Código proveedor
+            <input readOnly aria-readonly="true" value={profile.supplierCode || ''} />
+            <small>Asignado por La Despensa Rayana</small>
+          </label>
+          <label className="readonly-field">
+            Estado
+            <input readOnly aria-readonly="true" value={getSupplierStatusLabel(profile.status)} />
+            <small>Solo puede cambiarlo administración</small>
+          </label>
           <label>Nombre<input value={form.name} onChange={update('name')} /></label>
           <label>Razón social<input value={form.legalName} onChange={update('legalName')} /></label>
           <label>Slug<input value={form.slug} onChange={update('slug')} /></label>
