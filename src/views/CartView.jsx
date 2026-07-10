@@ -135,27 +135,29 @@ export function CartView({ state, actions }) {
         {checkoutStep === 'payment' && (
           <form className="checkout-form" onSubmit={actions.createOrder} noValidate>
             <div className="form-section-title"><CreditCard size={18} /> Pago</div>
-            <label>
-              Titular
-              <input value={paymentForm.holder} onChange={(event) => actions.updatePaymentForm('holder', event.target.value)} autoComplete="cc-name" />
-              <FieldError message={checkoutErrors.holder} />
-            </label>
-            <label>
-              Número de tarjeta
-              <input value={paymentForm.cardNumber} onChange={(event) => actions.updatePaymentForm('cardNumber', event.target.value)} inputMode="numeric" autoComplete="cc-number" placeholder="0000 0000 0000 0000" />
-              <FieldError message={checkoutErrors.cardNumber} />
-            </label>
-            <div className="checkout-grid">
+            <div className="safe-payment-panel">
+              <strong>Pago seguro externo</strong>
+              <p>
+                La Despensa Rayana no solicita ni almacena datos de tarjeta. En producción,
+                este paso debe conectarse con una pasarela segura como Stripe, Redsys o PayPal.
+              </p>
               <label>
-                Caducidad
-                <input value={paymentForm.expiry} onChange={(event) => actions.updatePaymentForm('expiry', event.target.value)} inputMode="numeric" autoComplete="cc-exp" placeholder="MM/AA" />
-                <FieldError message={checkoutErrors.expiry} />
+                Método de pago
+                <select value={paymentForm.method} onChange={(event) => actions.updatePaymentForm('method', event.target.value)}>
+                  <option value="external_pending">Pasarela segura pendiente de integración</option>
+                  <option value="manual_transfer">Transferencia bancaria manual</option>
+                </select>
+                <FieldError message={checkoutErrors.method} />
               </label>
-              <label>
-                CVC
-                <input value={paymentForm.cvc} onChange={(event) => actions.updatePaymentForm('cvc', event.target.value)} inputMode="numeric" autoComplete="cc-csc" />
-                <FieldError message={checkoutErrors.cvc} />
+              <label className="check-row payment-acceptance">
+                <input
+                  type="checkbox"
+                  checked={Boolean(paymentForm.accepted)}
+                  onChange={(event) => actions.updatePaymentForm('accepted', event.target.checked)}
+                />
+                Entiendo que el pedido queda pendiente de pago hasta completar la pasarela segura o recibir instrucciones de pago.
               </label>
+              <FieldError message={checkoutErrors.accepted} />
             </div>
             <div className="checkout-actions">
               <button className="secondary" type="button" onClick={() => actions.goToShipping()}>

@@ -8,10 +8,12 @@ import {
   ImageUp,
   Link as LinkIcon,
   LogOut,
+  MessageSquare,
   PackagePlus,
   Percent,
   RefreshCw,
   Save,
+  Send,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -170,6 +172,7 @@ function getSupplierSection(pathname) {
   if (pathname.includes('/products/') && pathname.includes('/edit')) return 'product-edit';
   if (pathname.includes('/products')) return 'products';
   if (pathname.includes('/offers')) return 'offers';
+  if (pathname.includes('/messages')) return 'messages';
   if (pathname.includes('/reports')) return 'reports';
   if (pathname.includes('/orders')) return 'orders';
   if (pathname.includes('/settings')) return 'settings';
@@ -457,12 +460,14 @@ function SupplierRegisterWizard({ actions, busy }) {
 function SupplierLayout({ state, actions, children }) {
   const navigate = useNavigate();
   const status = state.supplierProfile?.status || 'pending_review';
+  const unreadMessages = (state.supplierMessages || []).filter((thread) => thread.supplierUnread).length;
   const nav = [
     ['/supplier', Home, 'Dashboard'],
     ['/supplier/profile', UserRound, 'Mi perfil'],
     ['/supplier/products', ShoppingBag, 'Mis productos'],
     ['/supplier/products/new', PackagePlus, 'Nuevo producto'],
     ['/supplier/offers', Percent, 'Ofertas'],
+    ['/supplier/messages', MessageSquare, 'Mensajes'],
     ['/supplier/reports', BarChart3, 'Informes'],
     ['/supplier/orders', FileText, 'Pedidos'],
     ['/supplier/settings', Settings, 'Configuración'],
@@ -478,7 +483,10 @@ function SupplierLayout({ state, actions, children }) {
         </div>
         <nav>
           {nav.map(([to, Icon, label]) => (
-            <Link key={to} to={to}><Icon size={17} /> {label}</Link>
+            <Link key={to} to={to}>
+              <Icon size={17} /> {label}
+              {label === 'Mensajes' && unreadMessages > 0 && <span className="supplier-nav-badge">{unreadMessages}</span>}
+            </Link>
           ))}
         </nav>
         <button type="button" onClick={actions.handleLogout}><LogOut size={17} /> Cerrar sesión</button>
@@ -947,6 +955,102 @@ function SupplierOrders({ state }) {
   );
 }
 
+function getMessageThreadId(thread) {
+  return thread?._id || thread?.id || '';
+}
+
+function getMessageProductName(thread) {
+  return formatProductName(thread?.product?.name) || 'Producto';
+}
+
+function getLastMessage(thread) {
+  const messages = thread?.messages || [];
+  return thread?.lastMessage || messages[messages.length - 1] || null;
+}
+
+function SupplierMessages({ state, actions }) {
+  const messages = state.supplierMessages || [];
+  const selectedThread = messages.find((thread) => getMessageThreadId(thread) === state.selectedSupplierMessageId) || messages[0] || null;
+
+  useEffect(() => {
+    if (!state.selectedSupplierMessageId && selectedThread) {
+      actions.selectSupplierMessage(selectedThread);
+    }
+  }, [state.selectedSupplierMessageId, selectedThread?._id, selectedThread?.id]);
+
+  return (
+    <section className="supplier-messages-workspace">
+      <div className="section-heading compact">
+        <div>
+          <h1>Mensajes de clientes</h1>
+          <p>Consultas recibidas desde las fichas de producto</p>
+        </div>
+        <button className="secondary" type="button" onClick={actions.loadSupplierPanel} disabled={state.busy}><RefreshCw size={17} /> Actualizar</button>
+      </div>
+      <div className="supplier-message-grid">
+        <section className="admin-panel supplier-message-list">
+          <div className="admin-panel-title"><MessageSquare size={19} /> Bandeja</div>
+          {messages.length ? messages.map((thread) => {
+            const threadId = getMessageThreadId(thread);
+            const lastMessage = getLastMessage(thread);
+            return (
+              <button
+                className={'message-thread-row' + (threadId === getMessageThreadId(selectedThread) ? ' active' : '')}
+                type="button"
+                key={threadId}
+                onClick={() => actions.selectSupplierMessage(thread)}
+              >
+                <span>
+                  <strong>{getMessageProductName(thread)}</strong>
+                  <small>{thread.customer?.name || thread.customer?.email || 'Cliente'}</small>
+                </span>
+                <span>{lastMessage?.body || thread.subject || 'Consulta recibida'}</span>
+                {thread.supplierUnread && <em>Nuevo</em>}
+              </button>
+            );
+          }) : (
+            <div className="empty-state compact-empty">Aún no tienes mensajes de clientes.</div>
+          )}
+        </section>
+
+        <form className="admin-panel message-thread-detail" onSubmit={actions.replySupplierMessage}>
+          <div className="admin-panel-title"><Send size={19} /> Responder</div>
+          {selectedThread ? (
+            <>
+              <div className="message-thread-heading">
+                <strong>{selectedThread.subject || getMessageProductName(selectedThread)}</strong>
+                <span>{selectedThread.customer?.name || selectedThread.customer?.email || 'Cliente'} · {getMessageProductName(selectedThread)}</span>
+              </div>
+              <div className="message-bubble-list">
+                {(selectedThread.messages || []).map((message) => (
+                  <article className={'message-bubble ' + (message.senderRole === 'supplier' ? 'own' : 'other')} key={message._id || message.createdAt}>
+                    <strong>{message.senderRole === 'supplier' ? 'Tú' : selectedThread.customer?.name || 'Cliente'}</strong>
+                    <p>{message.body}</p>
+                    {message.createdAt && <small>{new Date(message.createdAt).toLocaleString('es-ES')}</small>}
+                  </article>
+                ))}
+              </div>
+              <label>
+                Respuesta
+                <textarea
+                  required
+                  minLength="3"
+                  value={state.supplierMessageReplyForm.message}
+                  onChange={(event) => actions.updateSupplierMessageReplyForm('message', event.target.value)}
+                  placeholder="Escribe tu respuesta para el cliente"
+                />
+              </label>
+              <button className="primary full" type="submit" disabled={state.busy}><Send size={18} /> Enviar respuesta</button>
+            </>
+          ) : (
+            <div className="empty-state compact-empty">Selecciona una conversación para responder.</div>
+          )}
+        </form>
+      </div>
+    </section>
+  );
+}
+
 export function SupplierView({ state, actions }) {
   const location = useLocation();
   const section = getSupplierSection(location.pathname);
@@ -962,6 +1066,7 @@ export function SupplierView({ state, actions }) {
       {section === 'products' && <SupplierProducts state={state} actions={actions} />}
       {(section === 'product-new' || section === 'product-edit') && <SupplierProductForm state={state} actions={actions} />}
       {section === 'offers' && <SupplierOffers state={state} actions={actions} />}
+      {section === 'messages' && <SupplierMessages state={state} actions={actions} />}
       {section === 'reports' && <SupplierReports state={state} />}
       {section === 'orders' && <SupplierOrders state={state} />}
       {section === 'settings' && <SupplierProfile state={state} actions={actions} />}

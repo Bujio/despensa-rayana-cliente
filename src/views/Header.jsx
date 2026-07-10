@@ -13,7 +13,7 @@ const commerceSections = [
   'La Rayana',
 ];
 
-export function Header({ cartCount, cartFeedback, busy, filters, session, view, onCommerceCategory, onDismissCartFeedback, onFavorites, onLogout, onSearch, onViewChange }) {
+export function Header({ cartCount, cartFeedback, busy, filters, session, onCommerceCategory, onDismissCartFeedback, onFavorites, onLogout, onSearch, onViewChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -42,7 +42,7 @@ export function Header({ cartCount, cartFeedback, busy, filters, session, view, 
     <header className="site-header">
       <div className="announcement-bar">
         <span>Envíos a toda España peninsular en 24/48h</span>
-        <span>Productos de origen extremeño</span>
+        <span>Productos de origen rayano</span>
       </div>
 
       <div className="topbar">
@@ -117,7 +117,12 @@ export function Header({ cartCount, cartFeedback, busy, filters, session, view, 
         ))}
       </nav>
 
-      <div className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')} onClick={() => setMenuOpen(false)} />
+      <button
+        className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')}
+        type="button"
+        onClick={() => setMenuOpen(false)}
+        aria-label="Cerrar menú"
+      />
       <aside className={'mobile-menu' + (menuOpen ? ' open' : '')} aria-hidden={!menuOpen}>
         <div className="mobile-menu-head">
           <strong>La Despensa Rayana</strong>

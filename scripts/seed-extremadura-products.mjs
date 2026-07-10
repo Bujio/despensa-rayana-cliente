@@ -364,8 +364,7 @@ async function createProducts(token, categoryMap) {
     }
   }
 
-  console.log('
-Resultado:', created, 'creados,', skipped, 'omitidos.');
+  console.log('\nResultado:', created, 'creados,', skipped, 'omitidos.');
 }
 
 const token = await getToken();

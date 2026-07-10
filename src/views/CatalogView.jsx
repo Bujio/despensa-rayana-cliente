@@ -91,7 +91,7 @@ export function CatalogView({ state, actions }) {
         <div className="section-heading">
           <div>
             <h1>Compra local para tu despensa</h1>
-            <p>Productos de origen extremeño, seleccionados con mirada rayana y listos para llenar tu cocina de territorio.</p>
+            <p>Productos de origen rayano, seleccionados con mirada rayana y listos para llenar tu cocina de territorio.</p>
           </div>
         </div>
 

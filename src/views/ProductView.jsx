@@ -63,7 +63,7 @@ function getUniqueRelatedProducts(candidates, selectedProduct) {
 }
 
 export function ProductView({ state, actions }) {
-  const { busy, favoriteIds, featuredProducts = [], loadingProductDetail, productReviews, products = [], relatedProducts: loadedRelatedProducts = [], reservedBySku, reviewForm, selectedProduct, session } = state;
+  const { busy, favoriteIds, featuredProducts = [], loadingProductDetail, productContactFeedback, productContactForm, productReviews, products = [], relatedProducts: loadedRelatedProducts = [], reservedBySku, reviewForm, selectedProduct, session } = state;
   const [quantity, setQuantity] = useState(1);
   const [imageFailed, setImageFailed] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
@@ -141,6 +141,7 @@ export function ProductView({ state, actions }) {
   const shortDescription = selectedProduct.shortDescription || '';
   const longDescription = selectedProductDescription;
   const selectedProductName = formatProductName(selectedProduct.name);
+  const supplierName = selectedProduct.supplier?.name || selectedProduct.supplierRef?.name || 'Proveedor local';
 
   const updateQuantity = (nextQuantity) => {
     setQuantity(Math.min(Math.max(nextQuantity, 1), Math.max(availableStock, 1)));
@@ -212,7 +213,7 @@ export function ProductView({ state, actions }) {
           </div>
 
           <div className="detail-facts">
-            <div><span>Proveedor</span><strong>{selectedProduct.supplier?.name || 'Proveedor local'}</strong></div>
+            <div><span>Proveedor</span><strong>{supplierName}</strong></div>
             <div><span>Categoría</span><strong>{categoryName}</strong></div>
             <div><span>Stock</span><strong>{stockText}</strong></div>
           </div>
@@ -248,6 +249,7 @@ export function ProductView({ state, actions }) {
         <div className="product-tabs">
           <button className={activeTab === 'description' ? 'active' : ''} type="button" onClick={() => setActiveTab('description')}>Descripción</button>
           <button className={activeTab === 'info' ? 'active' : ''} type="button" onClick={() => setActiveTab('info')}>Información adicional</button>
+          <button className={activeTab === 'contact' ? 'active' : ''} type="button" onClick={() => setActiveTab('contact')}>Contactar proveedor</button>
           <button className={activeTab === 'reviews' ? 'active' : ''} type="button" onClick={() => setActiveTab('reviews')}>Valoraciones ({reviewSummary.count})</button>
         </div>
 
@@ -277,9 +279,50 @@ export function ProductView({ state, actions }) {
         {activeTab === 'info' && (
           <div className="tab-content info-grid">
             <div><span>SKU</span><strong>{selectedProduct.sku}</strong></div>
-            <div><span>Proveedor</span><strong>{selectedProduct.supplier?.name || 'Proveedor local'}</strong></div>
+            <div><span>Proveedor</span><strong>{supplierName}</strong></div>
             <div><span>Categoría</span><strong>{categoryName}</strong></div>
             <div><span>Disponibilidad</span><strong>{stockText}</strong></div>
+          </div>
+        )}
+
+        {activeTab === 'contact' && (
+          <div className="tab-content product-contact-layout">
+            <div className="product-contact-copy">
+              <span className="eyebrow">Consulta directa</span>
+              <h2>Escribe a {supplierName}</h2>
+              <p>Pregunta por origen, preparación, disponibilidad o cualquier detalle del producto. La respuesta aparecerá en tu panel de cliente, dentro de Mi cuenta.</p>
+            </div>
+            <form className="review-form product-contact-form" onSubmit={actions.sendProductContactMessage}>
+              {!session && <p className="soft-note">Entra en tu cuenta para enviar mensajes a proveedores.</p>}
+              <label>
+                Asunto
+                <input
+                  value={productContactForm.subject}
+                  onChange={(event) => actions.updateProductContactForm('subject', event.target.value)}
+                  disabled={!session || busy}
+                  placeholder="Consulta sobre este producto"
+                />
+              </label>
+              <label>
+                Mensaje
+                <textarea
+                  required
+                  minLength="3"
+                  value={productContactForm.message}
+                  onChange={(event) => actions.updateProductContactForm('message', event.target.value)}
+                  disabled={!session || busy}
+                  placeholder="Escribe aquí tu consulta para el proveedor"
+                />
+              </label>
+              <button className="primary full" type="submit" disabled={busy || !session}>
+                <MessageSquare size={18} /> Enviar mensaje
+              </button>
+              {productContactFeedback?.message && (
+                <p className={'form-feedback ' + productContactFeedback.type} role={productContactFeedback.type === 'error' ? 'alert' : 'status'}>
+                  {productContactFeedback.message}
+                </p>
+              )}
+            </form>
           </div>
         )}
 
