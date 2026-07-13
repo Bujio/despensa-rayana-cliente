@@ -1,10 +1,9 @@
 import { ArrowLeft, BadgeCheck, Heart, MessageSquare, Minus, PackageSearch, Plus, ShieldCheck, ShoppingCart, Star, Truck } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { reviewModel } from '../models/reviewModel.js';
-import { ProductCard } from './ProductCard.jsx';
-import { formatCurrency, formatProductName } from './viewFormatters.js';
+import { formatCurrency } from './viewFormatters.js';
 
 function sanitizeRichDescription(value) {
   const raw = String(value || '').trim();
@@ -22,98 +21,21 @@ function ProductDescription({ content }) {
   return <div className="rich-product-description" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-function getProductId(product) {
-  return String(product?._id || product?.id || product?.sku || '');
-}
-
-function normalizeSupplierKey(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function getSupplierKeys(product) {
-  const supplier = product?.supplier || product?.supplierRef || {};
-  if (typeof supplier === 'string') return [normalizeSupplierKey(supplier)].filter(Boolean);
-  return [
-    supplier?._id
-      || product?.supplierRef?._id,
-    supplier?.id,
-    supplier?.supplierCode,
-    product?.supplierId,
-    product?.supplierCode,
-    supplier?.name,
-    product?.supplierName,
-  ].map(normalizeSupplierKey).filter(Boolean);
-}
-
-function getUniqueRelatedProducts(candidates, selectedProduct) {
-  const selectedId = getProductId(selectedProduct);
-  const selectedSupplierKeys = new Set(getSupplierKeys(selectedProduct));
-  if (!selectedSupplierKeys.size) return [];
-
-  const seen = new Set();
-  return candidates
-    .filter((product) => {
-      const productId = getProductId(product);
-      if (!productId || productId === selectedId || seen.has(productId)) return false;
-      if (!getSupplierKeys(product).some((key) => selectedSupplierKeys.has(key))) return false;
-      seen.add(productId);
-      return true;
-    })
-    .slice(0, 4);
-}
-
 export function ProductView({ state, actions }) {
-  const { busy, favoriteIds, featuredProducts = [], loadingProductDetail, productContactFeedback, productContactForm, productReviews, products = [], relatedProducts: loadedRelatedProducts = [], reservedBySku, reviewForm, selectedProduct, session } = state;
+  const { busy, favoriteIds, loadingProductDetail, productReviews, reservedBySku, reviewForm, selectedProduct, session } = state;
   const [quantity, setQuantity] = useState(1);
   const [imageFailed, setImageFailed] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
   const [activeTab, setActiveTab] = useState('description');
-  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-  const [isDescriptionOverflowing, setIsDescriptionOverflowing] = useState(false);
-  const descriptionRef = useRef(null);
-  const selectedProductDescription = selectedProduct?.description || '';
 
   const gallery = useMemo(() => {
     return productModel.getImages(selectedProduct);
   }, [selectedProduct]);
 
-  const relatedProducts = useMemo(() => {
-    return getUniqueRelatedProducts([...loadedRelatedProducts, ...featuredProducts, ...products], selectedProduct);
-  }, [featuredProducts, loadedRelatedProducts, products, selectedProduct]);
-
   useEffect(() => {
     setImageFailed(false);
     setSelectedImage(gallery[0]?.url || '');
-    setIsDescriptionExpanded(false);
   }, [gallery, selectedProduct?._id, selectedProduct?.id, selectedProduct?.sku]);
-
-  useEffect(() => {
-    const measureDescription = () => {
-      const container = descriptionRef.current;
-      if (!container || !selectedProductDescription) {
-        setIsDescriptionOverflowing(false);
-        return;
-      }
-
-      const content = container.querySelector('.rich-product-description') || container;
-      const styles = window.getComputedStyle(content);
-      const fontSize = Number.parseFloat(styles.fontSize) || 16;
-      const lineHeight = Number.parseFloat(styles.lineHeight) || fontSize * 1.7;
-      const maxLines = window.matchMedia('(max-width: 680px)').matches ? 5 : 10;
-      const collapsedHeight = lineHeight * maxLines;
-
-      container.style.setProperty('--description-collapsed-height', collapsedHeight + 'px');
-      setIsDescriptionOverflowing(content.scrollHeight > collapsedHeight + 4);
-    };
-
-    const frame = window.requestAnimationFrame(measureDescription);
-    window.addEventListener('resize', measureDescription);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener('resize', measureDescription);
-    };
-  }, [activeTab, selectedProduct?._id, selectedProduct?.id, selectedProduct?.sku, selectedProductDescription]);
 
   if (!selectedProduct) {
     return (
@@ -162,7 +84,7 @@ export function ProductView({ state, actions }) {
                 }}>
                   <img
                     src={item.url}
-                    alt={formatProductName(item.name) || selectedProductName}
+                    alt={item.name || selectedProduct.name}
                     onError={(event) => {
                       event.currentTarget.hidden = true;
                     }}
@@ -173,7 +95,7 @@ export function ProductView({ state, actions }) {
           )}
           <div className="product-detail-media">
             {image && !imageFailed ? (
-              <img src={image} alt={selectedProductName} onError={() => setImageFailed(true)} />
+              <img src={image} alt={selectedProduct.name} onError={() => setImageFailed(true)} />
             ) : (
               <PackageSearch size={64} />
             )}
@@ -184,7 +106,7 @@ export function ProductView({ state, actions }) {
         <article className="product-detail-body">
           <div className="product-detail-kicker">{selectedProduct.sku}</div>
           <div className="detail-title-row">
-            <h1>{selectedProductName}</h1>
+            <h1>{selectedProduct.name}</h1>
             <button
               className={'favorite-button detail-favorite' + (isFavorite ? ' active' : '')}
               type="button"
@@ -211,7 +133,7 @@ export function ProductView({ state, actions }) {
           </div>
 
           <div className="detail-facts">
-            <div><span>Proveedor</span><strong>{supplierName}</strong></div>
+            <div><span>Proveedor</span><strong>{selectedProduct.supplier?.name || 'Proveedor local'}</strong></div>
             <div><span>Categoría</span><strong>{categoryName}</strong></div>
             <div><span>Stock</span><strong>{stockText}</strong></div>
           </div>
@@ -247,7 +169,6 @@ export function ProductView({ state, actions }) {
         <div className="product-tabs">
           <button className={activeTab === 'description' ? 'active' : ''} type="button" onClick={() => setActiveTab('description')}>Descripción</button>
           <button className={activeTab === 'info' ? 'active' : ''} type="button" onClick={() => setActiveTab('info')}>Información adicional</button>
-          <button className={activeTab === 'contact' ? 'active' : ''} type="button" onClick={() => setActiveTab('contact')}>Contactar proveedor</button>
           <button className={activeTab === 'reviews' ? 'active' : ''} type="button" onClick={() => setActiveTab('reviews')}>Valoraciones ({reviewSummary.count})</button>
         </div>
 
@@ -266,50 +187,9 @@ export function ProductView({ state, actions }) {
         {activeTab === 'info' && (
           <div className="tab-content info-grid">
             <div><span>SKU</span><strong>{selectedProduct.sku}</strong></div>
-            <div><span>Proveedor</span><strong>{supplierName}</strong></div>
+            <div><span>Proveedor</span><strong>{selectedProduct.supplier?.name || 'Proveedor local'}</strong></div>
             <div><span>Categoría</span><strong>{categoryName}</strong></div>
             <div><span>Disponibilidad</span><strong>{stockText}</strong></div>
-          </div>
-        )}
-
-        {activeTab === 'contact' && (
-          <div className="tab-content product-contact-layout">
-            <div className="product-contact-copy">
-              <span className="eyebrow">Consulta directa</span>
-              <h2>Escribe a {supplierName}</h2>
-              <p>Pregunta por origen, preparación, disponibilidad o cualquier detalle del producto. La respuesta aparecerá en tu panel de cliente, dentro de Mi cuenta.</p>
-            </div>
-            <form className="review-form product-contact-form" onSubmit={actions.sendProductContactMessage}>
-              {!session && <p className="soft-note">Entra en tu cuenta para enviar mensajes a proveedores.</p>}
-              <label>
-                Asunto
-                <input
-                  value={productContactForm.subject}
-                  onChange={(event) => actions.updateProductContactForm('subject', event.target.value)}
-                  disabled={!session || busy}
-                  placeholder="Consulta sobre este producto"
-                />
-              </label>
-              <label>
-                Mensaje
-                <textarea
-                  required
-                  minLength="3"
-                  value={productContactForm.message}
-                  onChange={(event) => actions.updateProductContactForm('message', event.target.value)}
-                  disabled={!session || busy}
-                  placeholder="Escribe aquí tu consulta para el proveedor"
-                />
-              </label>
-              <button className="primary full" type="submit" disabled={busy || !session}>
-                <MessageSquare size={18} /> Enviar mensaje
-              </button>
-              {productContactFeedback?.message && (
-                <p className={'form-feedback ' + productContactFeedback.type} role={productContactFeedback.type === 'error' ? 'alert' : 'status'}>
-                  {productContactFeedback.message}
-                </p>
-              )}
-            </form>
           </div>
         )}
 
@@ -348,34 +228,6 @@ export function ProductView({ state, actions }) {
           </div>
         )}
       </section>
-
-      {relatedProducts.length > 0 && (
-        <section className="related-products-section">
-          <div className="section-heading compact">
-            <div>
-              <h2>Más productos de este proveedor</h2>
-              <p>Selección relacionada del mismo origen para completar tu despensa.</p>
-            </div>
-          </div>
-          <div className="related-product-grid">
-            {relatedProducts.map((product) => {
-              const productId = getProductId(product);
-              return (
-                <ProductCard
-                  key={productId}
-                  product={product}
-                  busy={busy}
-                  isFavorite={favoriteIds.includes(productId)}
-                  reservedBySku={reservedBySku}
-                  onAdd={actions.addToCart}
-                  onOpen={actions.openProduct}
-                  onToggleFavorite={actions.toggleFavorite}
-                />
-              );
-            })}
-          </div>
-        </section>
-      )}
     </section>
   );
 }

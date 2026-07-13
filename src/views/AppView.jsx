@@ -1,9 +1,11 @@
-import { lazy, Suspense } from 'react';
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
-import { RequireAdminAuth, RequireSupplierAuth, RequireUserAuth } from './AuthGuards.jsx';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { AccountView } from './AccountView.jsx';
+import { AdminView } from './AdminView.jsx';
 import { CanvasBackdrop } from './CanvasBackdrop.jsx';
-import { CookieConsent } from './CookieConsent.jsx';
+import { CartView } from './CartView.jsx';
+import { CatalogView } from './CatalogView.jsx';
 import { Header } from './Header.jsx';
+import { HomeView } from './HomeView.jsx';
 import { Notice } from './Notice.jsx';
 import { OrdersView } from './OrdersView.jsx';
 import { ProductView } from './ProductView.jsx';
@@ -12,15 +14,14 @@ import { StoryView } from './StoryView.jsx';
 export function AppView({ state, actions }) {
   return (
     <>
-    <SeoManager state={state} />
     <CanvasBackdrop />
     <div className="app-shell">
       <Header
         cartCount={state.cartCount}
-        cartFeedback={state.cartFeedback}
         busy={state.busy}
         filters={state.filters}
         session={state.session}
+        view={state.view}
         onLogout={actions.handleLogout}
         onFavorites={actions.showFavorites}
         onCommerceCategory={actions.openCommerceCategory}
@@ -29,7 +30,6 @@ export function AppView({ state, actions }) {
           actions.setView('catalog');
         }}
         onViewChange={actions.setView}
-        onDismissCartFeedback={actions.dismissCartFeedback}
       />
 
       <Notice message={state.notice} onClose={() => actions.setNotice('')} />
@@ -48,18 +48,7 @@ export function AppView({ state, actions }) {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <footer className="site-footer">
-        <strong>La Despensa Rayana</strong>
-        <nav aria-label="Información legal">
-          <Link to="/aviso-legal">Aviso legal</Link>
-          <Link to="/privacidad">Privacidad</Link>
-          <Link to="/cookies">Cookies</Link>
-          <Link to="/condiciones">Condiciones</Link>
-          <Link to="/devoluciones-envios">Envíos y devoluciones</Link>
-        </nav>
-      </footer>
     </div>
-    <CookieConsent />
     </>
   );
 }

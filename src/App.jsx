@@ -26,14 +26,8 @@ function readRoute(location) {
     '/catalogo': 'catalog',
     '/cesta': 'cart',
     '/la-rayana': 'story',
-    '/aviso-legal': 'legal',
-    '/privacidad': 'legal',
-    '/cookies': 'legal',
-    '/condiciones': 'legal',
-    '/devoluciones-envios': 'legal',
     '/pedidos': 'orders',
     '/cuenta': 'account',
-    '/cuenta/registro': 'account',
     '/gestion': 'admin',
   };
 
@@ -52,7 +46,6 @@ export default function App() {
     routeCategorySlug: route.categorySlug,
     navigate,
     routePath: location.pathname,
-    routeSearch: location.search,
     routeProductId: route.productId,
     routeView: route.view,
   });

@@ -2,7 +2,6 @@ import {
   Bold,
   ChevronLeft,
   ChevronRight,
-  CreditCard,
   Eye,
   Heading2,
   Heading3,
@@ -30,8 +29,7 @@ import {
 import { useEffect, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { orderModel } from '../models/orderModel.js';
-import { formatCurrency, formatProductName } from './viewFormatters.js';
-import { CmsResponsiveImage } from '../components/cms/CmsResponsiveImage.jsx';
+import { formatCurrency } from './viewFormatters.js';
 
 function getId(item) {
   return item?._id || item?.id || '';
@@ -73,52 +71,6 @@ function getHomeSectionTypeLabel(type) {
     promoBannerGrid: 'Bloque de banners',
   };
   return labels[type] || 'Componente base';
-}
-
-function getHomeSectionStatusLabel(status) {
-  const labels = {
-    draft: 'Borrador',
-    published: 'Publicado',
-    scheduled: 'Programado',
-    archived: 'Archivado',
-  };
-  return labels[status] || 'Publicado';
-}
-
-function toDateTimeLocal(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 16);
-}
-
-function CmsSectionPreview({ section, hero, viewport }) {
-  const isMobile = viewport === 'mobile';
-  const imageSource = section?.type === 'hero' ? hero : section;
-  const title = section?.type === 'hero' ? hero?.title : section?.title;
-  const body = section?.type === 'hero' ? hero?.description : section?.body;
-
-  return (
-    <div className={'cms-preview-shell ' + viewport}>
-      <div className="cms-preview-topbar">
-        <strong>{isMobile ? 'Preview móvil' : 'Preview desktop'}</strong>
-        <span>{getHomeSectionStatusLabel(section?.status)} · {section?.enabled === false ? 'Oculto' : 'Visible'}</span>
-      </div>
-      <article className={'cms-preview-card ' + (section?.type || 'custom')}>
-        {(imageSource?.imageUrl || imageSource?.mobileImageUrl) && (
-          <CmsResponsiveImage source={imageSource} fallbackAlt={title || 'Preview CMS'} />
-        )}
-        <div>
-          {section?.subtitle && <span className="eyebrow">{section.subtitle}</span>}
-          <h3>{title || 'Componente sin título'}</h3>
-          {body && <p>{body}</p>}
-          {(section?.ctaLabel || hero?.primaryLabel) && (
-            <button className="primary" type="button">{section?.ctaLabel || hero?.primaryLabel}</button>
-          )}
-        </div>
-      </article>
-    </div>
-  );
 }
 
 function OrderDetail({ order }) {
@@ -184,7 +136,6 @@ export function AdminView({ state, actions }) {
     categoryForm,
     homeComponentForm,
     homeContent,
-    homeContentRevisions,
     imageForm,
     orders,
     productForm,
@@ -327,7 +278,7 @@ export function AdminView({ state, actions }) {
                 <article className={'component-row' + (section.enabled ? '' : ' muted') + (selectedHomeSection?.id === section.id ? ' active' : '')} key={section.id}>
                   <button className="component-main" type="button" onClick={() => setSelectedHomeSectionId(section.id)}>
                     <strong>{section.title}</strong>
-                    <span>{getHomeSectionTypeLabel(section.type)} · {getHomeSectionStatusLabel(section.status)} · {section.enabled ? 'Visible' : 'Oculto'} · Editar</span>
+                    <span>{getHomeSectionTypeLabel(section.type)} · {section.enabled ? 'Visible' : 'Oculto'} · Editar</span>
                   </button>
                   <div className="component-actions">
                     <button className="icon-button" type="button" onClick={() => actions.toggleHomeSection(section.id)} title={section.enabled ? 'Ocultar componente' : 'Mostrar componente'}>
@@ -369,26 +320,10 @@ export function AdminView({ state, actions }) {
               <label>Título<input required value={homeComponentForm.title} onChange={updateComponentForm('title')} placeholder="Ej. Temporada de la dehesa" /></label>
               <label>Subtítulo<input value={homeComponentForm.subtitle} onChange={updateComponentForm('subtitle')} placeholder="Ej. Selección editorial" /></label>
               <label className="wide-field">Texto<textarea value={homeComponentForm.body} onChange={updateComponentForm('body')} placeholder="Mensaje para la portada manteniendo el tono de Despensa Rayana" /></label>
-              <label>Estado editorial
-                <select value={homeComponentForm.status} onChange={updateComponentForm('status')}>
-                  <option value="draft">Borrador</option>
-                  <option value="published">Publicado</option>
-                  <option value="scheduled">Programado</option>
-                  <option value="archived">Archivado</option>
-                </select>
-              </label>
-              <label>Inicio<input type="datetime-local" value={homeComponentForm.startDate} onChange={updateComponentForm('startDate')} /></label>
-              <label>Fin<input type="datetime-local" value={homeComponentForm.endDate} onChange={updateComponentForm('endDate')} /></label>
-              <label>Prioridad<input type="number" value={homeComponentForm.priority} onChange={updateComponentForm('priority')} /></label>
-              <label>Tracking ID<input value={homeComponentForm.trackingId} onChange={updateComponentForm('trackingId')} /></label>
-              <label>Campaña<input value={homeComponentForm.campaignName} onChange={updateComponentForm('campaignName')} /></label>
               {(homeComponentForm.type === 'promoBanner' || homeComponentForm.type === 'custom') && (
                 <>
                   <label className="wide-field">Imagen<input value={homeComponentForm.imageUrl} onChange={updateComponentForm('imageUrl')} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
                   <label className="wide-field">Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('component.imageUrl')} disabled={busy} /></label>
-                  <label className="wide-field">Imagen mobile<input value={homeComponentForm.mobileImageUrl} onChange={updateComponentForm('mobileImageUrl')} placeholder="URL para móvil" /></label>
-                  <label className="wide-field">Subir imagen mobile<input type="file" accept="image/*" onChange={uploadHomeImage('component.mobileImageUrl')} disabled={busy} /></label>
-                  <label className="wide-field">Alt text<input value={homeComponentForm.altText} onChange={updateComponentForm('altText')} placeholder="Texto alternativo de la imagen" /></label>
                   <label>Enlace<input value={homeComponentForm.linkUrl} onChange={updateComponentForm('linkUrl')} placeholder="catalog, story o https://..." /></label>
                   <label>Texto del botón<input value={homeComponentForm.ctaLabel} onChange={updateComponentForm('ctaLabel')} placeholder="Ej. Ver selección" /></label>
                 </>
@@ -410,7 +345,7 @@ export function AdminView({ state, actions }) {
                         {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
                       </span>
                       <span>
-                        <strong>{formatProductName(product.name)}</strong>
+                        <strong>{product.name}</strong>
                         <small>{product.sku} · {formatCurrency(product.price)}</small>
                       </span>
                     </label>
@@ -429,12 +364,7 @@ export function AdminView({ state, actions }) {
                       <label>Texto<textarea value={homeComponentForm[prefix + 'Body']} onChange={updateComponentForm(prefix + 'Body')} /></label>
                       <label>Imagen<input value={homeComponentForm[prefix + 'ImageUrl']} onChange={updateComponentForm(prefix + 'ImageUrl')} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
                       <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('component.' + prefix + 'ImageUrl')} disabled={busy} /></label>
-                      <label>Imagen mobile<input value={homeComponentForm[prefix + 'MobileImageUrl']} onChange={updateComponentForm(prefix + 'MobileImageUrl')} /></label>
-                      <label>Subir imagen mobile<input type="file" accept="image/*" onChange={uploadHomeImage('component.' + prefix + 'MobileImageUrl')} disabled={busy} /></label>
-                      <label>Alt text<input value={homeComponentForm[prefix + 'AltText']} onChange={updateComponentForm(prefix + 'AltText')} /></label>
                       <label>Enlace<input value={homeComponentForm[prefix + 'LinkUrl']} onChange={updateComponentForm(prefix + 'LinkUrl')} placeholder="catalog, story o https://..." /></label>
-                      <label>Tracking ID<input value={homeComponentForm[prefix + 'TrackingId']} onChange={updateComponentForm(prefix + 'TrackingId')} /></label>
-                      <label>Campaña<input value={homeComponentForm[prefix + 'CampaignName']} onChange={updateComponentForm(prefix + 'CampaignName')} /></label>
                     </div>
                   );
                 })}
@@ -457,45 +387,16 @@ export function AdminView({ state, actions }) {
                 <button className="primary full" type="button" onClick={actions.saveHomeContentSettings} disabled={busy}>
                   <Save size={17} /> Guardar cambios en Atlas
                 </button>
-                <div className="cms-preview-controls">
-                  <button className={homePreviewViewport === 'desktop' ? 'active' : ''} type="button" onClick={() => setHomePreviewViewport('desktop')}>Desktop</button>
-                  <button className={homePreviewViewport === 'mobile' ? 'active' : ''} type="button" onClick={() => setHomePreviewViewport('mobile')}>Móvil</button>
-                </div>
-                <CmsSectionPreview
-                  section={selectedHomeSection}
-                  hero={homeContent?.hero || {}}
-                  viewport={homePreviewViewport}
-                />
-                <div className="admin-form-grid selected-component-fields">
-                  <label>Estado editorial
-                    <select value={selectedHomeSection.status || 'published'} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'status', event.target.value)}>
-                      <option value="draft">Borrador</option>
-                      <option value="published">Publicado</option>
-                      <option value="scheduled">Programado</option>
-                      <option value="archived">Archivado</option>
-                    </select>
-                  </label>
-                  <label>Inicio<input type="datetime-local" value={toDateTimeLocal(selectedHomeSection.startDate)} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'startDate', event.target.value)} /></label>
-                  <label>Fin<input type="datetime-local" value={toDateTimeLocal(selectedHomeSection.endDate)} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'endDate', event.target.value)} /></label>
-                  <label>Prioridad<input type="number" value={selectedHomeSection.priority ?? 0} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'priority', Number(event.target.value || 0))} /></label>
-                  <label>Tracking ID<input value={selectedHomeSection.trackingId || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'trackingId', event.target.value)} /></label>
-                  <label>Campaña<input value={selectedHomeSection.campaignName || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'campaignName', event.target.value)} /></label>
-                </div>
 
                 {selectedHomeSection.type === 'hero' ? (
                   <div className="admin-form-grid selected-component-fields">
                     <label className="wide-field">Imagen principal<input value={homeContent?.hero?.imageUrl || ''} onChange={updateHero('imageUrl')} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
                     <label className="wide-field">Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('hero.imageUrl')} disabled={busy} /></label>
-                    <label className="wide-field">Imagen mobile<input value={homeContent?.hero?.mobileImageUrl || ''} onChange={updateHero('mobileImageUrl')} placeholder="URL para pantallas pequeñas" /></label>
-                    <label className="wide-field">Subir imagen mobile<input type="file" accept="image/*" onChange={uploadHomeImage('hero.mobileImageUrl')} disabled={busy} /></label>
-                    <label className="wide-field">Alt text<input value={homeContent?.hero?.altText || ''} onChange={updateHero('altText')} /></label>
                     <label>Etiqueta<input value={homeContent?.hero?.eyebrow || ''} onChange={updateHero('eyebrow')} /></label>
                     <label>Título<input value={homeContent?.hero?.title || ''} onChange={updateHero('title')} /></label>
                     <label className="wide-field">Descripción<textarea value={homeContent?.hero?.description || ''} onChange={updateHero('description')} /></label>
                     <label>Botón principal<input value={homeContent?.hero?.primaryLabel || ''} onChange={updateHero('primaryLabel')} /></label>
                     <label>Botón secundario<input value={homeContent?.hero?.secondaryLabel || ''} onChange={updateHero('secondaryLabel')} /></label>
-                    <label>Tracking ID<input value={homeContent?.hero?.trackingId || ''} onChange={updateHero('trackingId')} /></label>
-                    <label>Campaña<input value={homeContent?.hero?.campaignName || ''} onChange={updateHero('campaignName')} /></label>
                   </div>
                 ) : (
                   <div className="admin-form-grid selected-component-fields">
@@ -509,9 +410,6 @@ export function AdminView({ state, actions }) {
                   <div className="admin-form-grid selected-component-fields">
                     <label className="wide-field">Imagen<input value={selectedHomeSection.imageUrl || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'imageUrl', event.target.value)} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
                     <label className="wide-field">Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('section.' + selectedHomeSection.id + '.imageUrl')} disabled={busy} /></label>
-                    <label className="wide-field">Imagen mobile<input value={selectedHomeSection.mobileImageUrl || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'mobileImageUrl', event.target.value)} /></label>
-                    <label className="wide-field">Subir imagen mobile<input type="file" accept="image/*" onChange={uploadHomeImage('section.' + selectedHomeSection.id + '.mobileImageUrl')} disabled={busy} /></label>
-                    <label className="wide-field">Alt text<input value={selectedHomeSection.altText || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'altText', event.target.value)} /></label>
                     <label>Enlace<input value={selectedHomeSection.linkUrl || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'linkUrl', event.target.value)} /></label>
                     <label>Texto del botón<input value={selectedHomeSection.ctaLabel || ''} onChange={(event) => actions.updateHomeSection(selectedHomeSection.id, 'ctaLabel', event.target.value)} /></label>
                   </div>
@@ -560,7 +458,7 @@ export function AdminView({ state, actions }) {
                             {image ? <img src={image} alt="" /> : <ShoppingBag size={16} />}
                           </span>
                           <span>
-                            <strong>{formatProductName(product.name)}</strong>
+                            <strong>{product.name}</strong>
                             <small>{product.sku} · {formatCurrency(product.price)}</small>
                           </span>
                         </label>
@@ -579,12 +477,7 @@ export function AdminView({ state, actions }) {
                         <label>Texto<input value={item.body || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'body', event.target.value)} /></label>
                         <label>Imagen<input value={item.imageUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'imageUrl', event.target.value)} placeholder="Se rellena al subir imagen o puedes pegar una URL" /></label>
                         <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('sectionItem.' + selectedHomeSection.id + '.' + itemIndex + '.imageUrl')} disabled={busy} /></label>
-                        <label>Imagen mobile<input value={item.mobileImageUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'mobileImageUrl', event.target.value)} /></label>
-                        <label>Subir imagen mobile<input type="file" accept="image/*" onChange={uploadHomeImage('sectionItem.' + selectedHomeSection.id + '.' + itemIndex + '.mobileImageUrl')} disabled={busy} /></label>
-                        <label>Alt text<input value={item.altText || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'altText', event.target.value)} /></label>
                         <label>Enlace<input value={item.linkUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'linkUrl', event.target.value)} placeholder="Alimentación, catalog, story o https://..." /></label>
-                        <label>Tracking ID<input value={item.trackingId || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'trackingId', event.target.value)} /></label>
-                        <label>Campaña<input value={item.campaignName || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'campaignName', event.target.value)} /></label>
                       </div>
                     ))}
                   </div>
@@ -601,39 +494,12 @@ export function AdminView({ state, actions }) {
                           <label>Texto<textarea value={item.body || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'body', event.target.value)} /></label>
                           <label>Imagen<input value={item.imageUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'imageUrl', event.target.value)} /></label>
                           <label>Subir imagen al servidor<input type="file" accept="image/*" onChange={uploadHomeImage('sectionItem.' + selectedHomeSection.id + '.' + itemIndex + '.imageUrl')} disabled={busy} /></label>
-                          <label>Imagen mobile<input value={item.mobileImageUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'mobileImageUrl', event.target.value)} /></label>
-                          <label>Subir imagen mobile<input type="file" accept="image/*" onChange={uploadHomeImage('sectionItem.' + selectedHomeSection.id + '.' + itemIndex + '.mobileImageUrl')} disabled={busy} /></label>
-                          <label>Alt text<input value={item.altText || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'altText', event.target.value)} /></label>
                           <label>Enlace<input value={item.linkUrl || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'linkUrl', event.target.value)} /></label>
-                          <label>Texto del botón<input value={item.ctaLabel || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'ctaLabel', event.target.value)} /></label>
-                          <label>Tracking ID<input value={item.trackingId || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'trackingId', event.target.value)} /></label>
-                          <label>Campaña<input value={item.campaignName || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'campaignName', event.target.value)} /></label>
                         </div>
                       );
                     })}
                   </div>
                 )}
-
-                <div className="cms-revision-panel">
-                  <div className="admin-panel-title"><RotateCcw size={18} /> Historial de portada</div>
-                  {Array.isArray(homeContentRevisions) && homeContentRevisions.length ? (
-                    <div className="cms-revision-list">
-                      {homeContentRevisions.map((revision) => (
-                        <article className="cms-revision-row" key={revision.id}>
-                          <div>
-                            <strong>{revision.heroTitle || 'Portada sin título'}</strong>
-                            <span>{new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(revision.createdAt))} · {revision.sectionsCount} secciones</span>
-                          </div>
-                          <button className="secondary" type="button" onClick={() => actions.restoreHomeContentRevision(revision.id)} disabled={busy}>
-                            Restaurar
-                          </button>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="empty-state compact-empty">El historial aparecerá después de guardar cambios en Atlas.</div>
-                  )}
-                </div>
               </div>
             ) : (
               <div className="empty-state compact-empty">Selecciona un componente de la lista.</div>
@@ -664,21 +530,17 @@ export function AdminView({ state, actions }) {
                         <strong>{user.name || 'Cliente sin nombre'}</strong>
                         <span>{user.email}</span>
                       </button>
-                      <div className="user-row-meta">
-                        <span className={'status ' + (user.role === 'admin' ? 'shipped' : '')}>{getRoleLabel(user.role)}</span>
-                        <button className="metric-button" type="button" onClick={() => actions.openAdminUserOrders(user)}>
-                          <ShoppingBag size={16} />
-                          <span>{orderCount}</span>
-                        </button>
-                      </div>
-                      <div className="row-icon-actions">
-                        <button className="icon-button" type="button" onClick={() => actions.selectAdminUser(user)} title="Editar cliente">
-                          <Eye size={17} />
-                        </button>
-                        <button className="icon-button danger-button" type="button" onClick={() => actions.deleteAdminUser(user)} disabled={busy || isCurrentUser} title="Eliminar cliente">
-                          <Trash2 size={17} />
-                        </button>
-                      </div>
+                      <span className={'status ' + (user.role === 'admin' ? 'shipped' : '')}>{getRoleLabel(user.role)}</span>
+                      <button className="metric-button" type="button" onClick={() => actions.openAdminUserOrders(user)}>
+                        <ShoppingBag size={16} />
+                        <span>{orderCount}</span>
+                      </button>
+                      <button className="icon-button" type="button" onClick={() => actions.selectAdminUser(user)} title="Editar cliente">
+                        <Eye size={17} />
+                      </button>
+                      <button className="icon-button danger-button" type="button" onClick={() => actions.deleteAdminUser(user)} disabled={busy || isCurrentUser} title="Eliminar cliente">
+                        <Trash2 size={17} />
+                      </button>
                     </article>
                   );
                 })}
@@ -703,7 +565,7 @@ export function AdminView({ state, actions }) {
                       <option value="admin">Admin</option>
                     </select>
                   </label>
-                  <label className="wide-field">Calle<input value={adminUserForm.street} onChange={updateUser('street')} /></label>
+                  <label>Calle<input value={adminUserForm.street} onChange={updateUser('street')} /></label>
                   <label>Código postal<input value={adminUserForm.codePostal} onChange={updateUser('codePostal')} /></label>
                   <label>Ciudad<input value={adminUserForm.city} onChange={updateUser('city')} /></label>
                   <label>País<input value={adminUserForm.country} onChange={updateUser('country')} /></label>
@@ -767,32 +629,20 @@ export function AdminView({ state, actions }) {
             <div className="admin-list">
               {paginatedProducts.map((product) => {
                 const productId = getId(product);
-                  const offerLabel = productModel.getOfferLabel(product);
-                  const [statusLabel, statusTone] = getProductStatus(product);
+                const offerLabel = productModel.getOfferLabel(product);
                 const image = productModel.getImage(product);
                 return (
-                  <article className={'admin-product-row' + (selectedAdminProductId === productId ? ' active' : '')} key={productId}>
+                  <article className={'collection-row with-thumb' + (selectedAdminProductId === productId ? ' active' : '')} key={productId}>
                     <div className="admin-thumb">
-                      {image ? <img src={image} alt={formatProductName(product.name)} /> : <PackagePlus size={22} />}
+                      {image ? <img src={image} alt={product.name} /> : <PackagePlus size={22} />}
                     </div>
-                    <button className="user-main admin-product-main" type="button" onClick={() => actions.selectAdminProduct(product)}>
-                      <strong>{formatProductName(product.name)}</strong>
+                    <button className="user-main" type="button" onClick={() => actions.selectAdminProduct(product)}>
+                      <strong>{product.name}</strong>
                       <span>{product.sku} · {formatCurrency(product.price)} · {product.stock} uds.</span>
                     </button>
-                    <div className="admin-product-meta">
-                      <AdminBadge tone={statusTone}>{statusLabel}</AdminBadge>
-                      {offerLabel && <span className="offer-pill">{offerLabel}</span>}
-                    </div>
-                    <div className="admin-product-actions">
-                      {product.status === 'pending_review' && (
-                        <>
-                          <button className="primary mini-button approve-product-button" type="button" onClick={() => actions.approveAdminProduct(product)} disabled={busy}>Aprobar</button>
-                          <button className="secondary mini-button reject-product-button" type="button" onClick={() => actions.rejectAdminProduct(product)} disabled={busy}>Rechazar</button>
-                        </>
-                      )}
-                      <button className="icon-button" type="button" onClick={() => actions.selectAdminProduct(product)} title="Editar producto"><Eye size={17} /></button>
-                      <button className="icon-button danger-button" type="button" onClick={() => actions.deleteProduct(product)} disabled={busy} title="Eliminar producto"><Trash2 size={17} /></button>
-                    </div>
+                    {offerLabel && <span className="offer-pill">{offerLabel}</span>}
+                    <button className="icon-button" type="button" onClick={() => actions.selectAdminProduct(product)} title="Editar producto"><Eye size={17} /></button>
+                    <button className="icon-button danger-button" type="button" onClick={() => actions.deleteProduct(product)} disabled={busy} title="Eliminar producto"><Trash2 size={17} /></button>
                   </article>
                 );
               })}
@@ -828,12 +678,12 @@ export function AdminView({ state, actions }) {
             <div className="admin-panel-title"><PackagePlus size={19} /> {selectedAdminProductId ? 'Editar producto' : 'Nuevo producto'}</div>
             <div className="admin-form-grid">
               <label>Nombre<input required value={productForm.name} onChange={updateProduct('name')} placeholder="Ej. Miel Villuercas-Ibores" /></label>
-              <label>SKU<input value={productForm.sku} onChange={updateProduct('sku')} placeholder="Se genera automáticamente: LDR-CAT-PROV-PROD-XXXX" /></label>
+              <label>SKU<input required value={productForm.sku} onChange={updateProduct('sku')} placeholder="EXT-MIE-NUEVA-500" /></label>
               <label>Precio<input required type="number" min="0.01" step="0.01" value={productForm.price} onChange={updateProduct('price')} /></label>
               <label>Stock<input required type="number" min="0" step="1" value={productForm.stock} onChange={updateProduct('stock')} /></label>
               <label>
                 Categoría
-                <select required value={productForm.category} onChange={updateProduct('category')}>
+                <select value={productForm.category} onChange={updateProduct('category')}>
                   <option value="">Sin categoría</option>
                   {categories.map((category) => (
                     <option key={getId(category)} value={getId(category)}>{category.name}</option>
@@ -1053,7 +903,7 @@ export function AdminView({ state, actions }) {
               {filteredReviews.length ? filteredReviews.map((review) => (
                 <article className="collection-row" key={review._id || review.id}>
                   <button className="user-main" type="button">
-                    <strong>{formatProductName(review.product?.name) || 'Producto'}</strong>
+                    <strong>{review.product?.name || 'Producto'}</strong>
                     <span>{review.user?.email || review.user?.name || 'Cliente'} · {review.rating}/5 · {review.title || review.comment}</span>
                   </button>
                   <button className="icon-button danger-button" type="button" onClick={() => actions.deleteReview(review)} disabled={busy} title="Eliminar opinión">
@@ -1081,7 +931,7 @@ export function AdminView({ state, actions }) {
               <select required value={imageForm.productId} onChange={updateImage('productId')}>
                 <option value="">Selecciona un producto</option>
                 {filteredMediaProducts.map((product) => (
-                  <option key={getId(product)} value={getId(product)}>{formatProductName(product.name)} · {product.sku}</option>
+                  <option key={getId(product)} value={getId(product)}>{product.name} · {product.sku}</option>
                 ))}
               </select>
             </label>
