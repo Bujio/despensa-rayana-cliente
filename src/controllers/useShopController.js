@@ -10,30 +10,10 @@ import { favoritesModel } from '../models/favoritesModel.js';
 import { homeContentModel } from '../models/homeContentModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { sessionModel } from '../models/sessionModel.js';
-import { supplierModel } from '../models/supplierModel.js';
 import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
 
-
-function translateAuthMessage(message) {
-  const value = String(message || '').toLowerCase();
-  if (!value) return 'No se pudo completar la operación.';
-  if (value.includes('invalid credentials')) return 'El email o la contraseña no son correctos.';
-  if (value.includes('email already in use')) return 'Ya existe una cuenta con este email.';
-  if (value.includes('password must be at least')) return 'La contraseña debe tener al menos 6 caracteres.';
-  if (value.includes('password must contain at least one uppercase')) return 'La contraseña debe incluir al menos una letra mayúscula.';
-  if (value.includes('password must contain at least one number')) return 'La contraseña debe incluir al menos un número.';
-  if (value.includes('invalid email')) return 'Introduce un email válido.';
-  if (value.includes('name must be at least')) return 'El nombre debe tener al menos 2 caracteres.';
-  if (value.includes('too many')) return 'Se han realizado demasiados intentos. Inténtalo de nuevo más tarde.';
-  if (value.includes('failed to fetch') || value.includes('networkerror')) return 'No se ha podido conectar con el servidor.';
-  return message || 'No se pudo completar la operación.';
-}
-
 const initialAuthForm = {
-  accountType: '',
   name: '',
-  legalName: '',
-  description: '',
   email: '',
   password: '',
   phone: '',
@@ -76,17 +56,6 @@ const initialAdminSearch = {
   orders: '',
   media: '',
   reviews: '',
-  suppliers: '',
-};
-
-const initialSupplierForm = {
-  name: '',
-  legalName: '',
-  phone: '',
-  status: '',
-  featured: false,
-  internalNotes: '',
-  rejectionReason: '',
 };
 
 const initialImageForm = {
@@ -177,33 +146,6 @@ const formatDateInput = (value) => {
 };
 
 const getProductId = (product) => String(product?._id || product?.id || product?.sku || '');
-const getSupplierKey = (supplier) => String(supplier?._id || supplier?.id || supplier?.supplierCode || supplier?.name || '').trim();
-
-function getProductFormFromProduct(product, supplierOverride = null) {
-  const offer = product?.offer || {};
-  const supplier = supplierOverride || product?.supplier || {};
-
-  return {
-    name: product?.name || '',
-    sku: product?.sku || '',
-    price: product?.price ?? '',
-    shortDescription: product?.shortDescription || '',
-    description: product?.description || '',
-    stock: product?.stock ?? '0',
-    category: typeof product?.category === 'object' ? product.category?._id || product.category?.id || '' : product?.category || '',
-    supplierId: supplier.id ?? '0',
-    supplierName: supplier.name || '',
-    supplierImages: Array.isArray(supplier.images) ? supplier.images : [],
-    images: Array.isArray(product?.images) ? product.images : [],
-    offerType: offer.active ? offer.type || 'none' : 'none',
-    offerValue: offer.value ?? '',
-    offerBundleQuantity: offer.bundleQuantity || '3',
-    offerBundlePayQuantity: offer.bundlePayQuantity || '2',
-    offerLabel: offer.label || '',
-    offerValidFrom: formatDateInput(offer.validFrom),
-    offerValidUntil: formatDateInput(offer.validUntil),
-  };
-}
 
 const routeByView = {
   home: '/',
@@ -213,29 +155,7 @@ const routeByView = {
   orders: '/pedidos',
   account: '/cuenta',
   admin: '/gestion',
-  supplier: '/supplier',
 };
-
-const adminRouteByTab = {
-  dashboard: '/admin',
-  homepage: '/admin/home',
-  products: '/admin/products',
-  categories: '/admin/categories',
-  orders: '/admin/orders',
-  users: '/admin/users',
-  suppliers: '/admin/suppliers',
-  offers: '/admin/offers',
-  content: '/admin/content',
-  messages: '/admin/messages',
-  reports: '/admin/reports',
-  settings: '/admin/settings',
-  reviews: '/admin/reviews',
-  media: '/admin/media',
-};
-
-const adminTabByRoute = Object.fromEntries(
-  Object.entries(adminRouteByTab).map(([tab, path]) => [path, tab]),
-);
 
 function buildRoute(view, { categorySlug = '', productId = '' } = {}) {
   if (view === 'product' && productId) return '/producto/' + encodeURIComponent(productId);
@@ -318,22 +238,15 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [notice, setNotice] = useState('');
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState(() => ({ ...initialAuthForm }));
-  const [authFeedback, setAuthFeedback] = useState(null);
-  const [adminTab, setAdminTab] = useState('dashboard');
+  const [adminTab, setAdminTab] = useState('users');
   const [adminSearch, setAdminSearchState] = useState(() => ({ ...initialAdminSearch }));
   const [adminProducts, setAdminProducts] = useState([]);
-  const [adminSuppliers, setAdminSuppliers] = useState([]);
-  const [supplierProfile, setSupplierProfile] = useState(null);
-  const [supplierProducts, setSupplierProducts] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUserForm, setAdminUserForm] = useState(() => ({ ...initialAdminUserForm }));
   const [selectedAdminUserId, setSelectedAdminUserId] = useState('');
   const [selectedAdminOrderId, setSelectedAdminOrderId] = useState('');
   const [selectedAdminProductId, setSelectedAdminProductId] = useState('');
   const [selectedAdminCategoryId, setSelectedAdminCategoryId] = useState('');
-  const [selectedAdminSupplierId, setSelectedAdminSupplierId] = useState('');
-  const [selectedAdminSupplierKey, setSelectedAdminSupplierKey] = useState('');
-  const [supplierForm, setSupplierForm] = useState(() => ({ ...initialSupplierForm }));
   const [categoryForm, setCategoryForm] = useState(() => ({ ...initialCategoryForm }));
   const [productForm, setProductForm] = useState(() => ({ ...initialProductForm }));
   const [imageForm, setImageForm] = useState(() => ({ ...initialImageForm }));
@@ -405,24 +318,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   };
 
-  function openAdminTab(nextTab) {
-    setAdminTab(nextTab);
-    const nextPath = adminRouteByTab[nextTab] || '/admin';
-    if (navigate && routePath !== nextPath) {
-      navigate(nextPath, { replace: false });
-    }
-  }
-
   useEffect(() => {
     loadCategories();
     loadFeaturedProducts();
     loadHomeContent();
   }, []);
-
-  useEffect(() => {
-    if (routeView !== 'admin') return;
-    setAdminTab(adminTabByRoute[routePath] || (routePath === '/gestion' ? 'dashboard' : 'dashboard'));
-  }, [routeView, routePath]);
 
   useEffect(() => {
     if (routeView !== 'product') {
@@ -457,7 +357,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       loadMyReviews();
       if (session.user?.role === 'admin') {
         loadAdminProducts();
-        loadAdminSuppliers();
         loadAdminUsers();
         loadAdminReviews();
       }
@@ -470,19 +369,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAccountReviewForm({ ...emptyReviewForm });
       setSelectedAccountReviewId('');
       setAdminProducts([]);
-      setAdminSuppliers([]);
-      setSupplierProfile(null);
-      setSupplierProducts([]);
       setAdminUsers([]);
       setAdminUserForm({ ...initialAdminUserForm });
       setSelectedAdminUserId('');
       setSelectedAdminOrderId('');
       setSelectedAdminProductId('');
       setSelectedAdminCategoryId('');
-      setSelectedAdminSupplierId('');
-      setSelectedAdminSupplierKey('');
-      setSupplierForm({ ...initialSupplierForm });
-      setAdminTab('dashboard');
+      setAdminTab('users');
       setAdminSearchState({ ...initialAdminSearch });
       setCheckoutStep('items');
       setShippingForm(getShippingDefaults(null));
@@ -605,11 +498,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   async function loadAdminProducts() {
     try {
-      if (session?.user?.role === 'admin') {
-        setAdminProducts(await adminModel.listProducts(request));
-        return;
-      }
-
       const result = await catalogModel.listProducts({
         page: 1,
         filters: { ...emptyFilters, inStock: false },
@@ -618,30 +506,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAdminProducts(result.products);
     } catch (error) {
       setNotice(error.message);
-    }
-  }
-
-  async function loadAdminSuppliers() {
-    if (session?.user?.role !== 'admin') return;
-    try {
-      setAdminSuppliers(await adminModel.listSuppliers(request));
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }
-
-  async function loadSupplierPanel() {
-    if (session?.user?.role !== 'supplier') return;
-    try {
-      const [profile, products] = await Promise.all([
-        supplierModel.getProfile(request),
-        supplierModel.listProducts(request),
-      ]);
-      setSupplierProfile(profile);
-      setSupplierProducts(products);
-    } catch (error) {
-      setNotice(error.message);
-      setSupplierProducts([]);
     }
   }
 
@@ -677,20 +541,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     event.preventDefault();
     setBusy(true);
     setNotice('');
-    setAuthFeedback(null);
     try {
       if (authMode === 'login') {
         const next = await authModel.login(authForm.email, authForm.password);
         applySession(next);
-        setView(next.user?.role === 'admin' ? 'admin' : next.user?.role === 'supplier' ? 'supplier' : 'catalog');
+        setView(next.user?.role === 'admin' ? 'admin' : 'catalog');
         setNotice('Bienvenido, ' + (next.user?.name || 'cliente'));
       } else {
-        if (!authForm.accountType) {
-          setAuthFeedback({ type: 'error', message: 'Elige si quieres darte de alta como cliente o proveedor.' });
-          return;
-        }
-
-        const payload = {
+        await authModel.register({
           name: authForm.name,
           email: authForm.email,
           password: authForm.password,
@@ -701,33 +559,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
             codePostal: authForm.codePostal,
             city: authForm.city,
           },
-        };
-
-        if (authForm.accountType === 'supplier') {
-          const result = await authModel.registerSupplier({
-            ...payload,
-            legalName: authForm.legalName,
-            description: authForm.description,
-          });
-          setAuthMode('login');
-          setAuthForm({ ...initialAuthForm, email: authForm.email });
-          setAuthFeedback({
-            type: 'success',
-            message: result?.message || 'Solicitud de proveedor registrada correctamente. Tu perfil queda pendiente de revisión.',
-          });
-          return;
-        }
-
-        await authModel.register(payload);
-        setAuthMode('login');
-        setAuthForm({ ...initialAuthForm, email: authForm.email });
-        setAuthFeedback({
-          type: 'success',
-          message: 'Cuenta creada correctamente. Revisa el correo para verificarla antes de comprar.',
         });
+        setAuthMode('login');
+        setNotice('Cuenta creada. Revisa el correo para verificarla antes de comprar.');
       }
     } catch (error) {
-      setAuthFeedback({ type: 'error', message: translateAuthMessage(error.message) });
+      setNotice(error.message);
     } finally {
       setBusy(false);
     }
@@ -1066,18 +903,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   };
 
   const updateAuthForm = (field, value) => {
-    setAuthFeedback(null);
     setAuthForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const chooseAccountType = (accountType) => {
-    setAuthFeedback(null);
-    setAuthForm((current) => ({ ...current, accountType }));
-  };
-
-  const changeAuthMode = (mode) => {
-    setAuthFeedback(null);
-    setAuthMode(mode);
   };
 
   const updateCategoryForm = (field, value) => {
@@ -1351,10 +1177,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setAdminUserForm((current) => ({ ...current, [field]: value }));
   };
 
-  const updateSupplierForm = (field, value) => {
-    setSupplierForm((current) => ({ ...current, [field]: value }));
-  };
-
   const setAdminSearch = (key, value) => {
     setAdminSearchState((current) => ({ ...current, [key]: value }));
   };
@@ -1373,8 +1195,28 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }
 
   function selectAdminProduct(product) {
+    const offer = product?.offer || {};
     setSelectedAdminProductId(product?._id || product?.id || '');
-    setProductForm(getProductFormFromProduct(product));
+    setProductForm({
+      name: product?.name || '',
+      sku: product?.sku || '',
+      price: product?.price ?? '',
+      shortDescription: product?.shortDescription || '',
+      description: product?.description || '',
+      stock: product?.stock ?? '0',
+      category: typeof product?.category === 'object' ? product.category?._id || product.category?.id || '' : product?.category || '',
+      supplierId: product?.supplier?.id ?? '1',
+      supplierName: product?.supplier?.name || '',
+      supplierImages: Array.isArray(product?.supplier?.images) ? product.supplier.images : [],
+      images: Array.isArray(product?.images) ? product.images : [],
+      offerType: offer.active ? offer.type || 'none' : 'none',
+      offerValue: offer.value ?? '',
+      offerBundleQuantity: offer.bundleQuantity || '3',
+      offerBundlePayQuantity: offer.bundlePayQuantity || '2',
+      offerLabel: offer.label || '',
+      offerValidFrom: formatDateInput(offer.validFrom),
+      offerValidUntil: formatDateInput(offer.validUntil),
+    });
     if (product?._id || product?.id) {
       setImageForm((current) => ({ ...current, productId: product._id || product.id }));
     }
@@ -1384,123 +1226,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setSelectedAdminProductId('');
     setProductForm({ ...initialProductForm });
     setImageForm({ ...initialImageForm });
-  }
-
-  async function selectAdminSupplier(supplier) {
-    const supplierId = supplier?._id || supplier?.id || '';
-    const key = getSupplierKey(supplier);
-    setSelectedAdminSupplierId(supplierId);
-    setSelectedAdminSupplierKey(key);
-    setSupplierForm({
-      name: supplier?.name || '',
-      legalName: supplier?.legalName || '',
-      phone: supplier?.phone || '',
-      status: supplier?.status || '',
-      featured: Boolean(supplier?.featured),
-      internalNotes: supplier?.internalNotes || '',
-      rejectionReason: supplier?.rejectionReason || '',
-    });
-
-    if (!supplierId) return;
-    setBusy(true);
-    try {
-      const detail = await adminModel.getSupplier(request, supplierId);
-      setAdminSuppliers((current) => current.map((item) => (
-        (item._id || item.id) === supplierId ? { ...item, ...detail } : item
-      )));
-      setSupplierForm({
-        name: detail?.name || '',
-        legalName: detail?.legalName || '',
-        phone: detail?.phone || '',
-        status: detail?.status || '',
-        featured: Boolean(detail?.featured),
-        internalNotes: detail?.internalNotes || '',
-        rejectionReason: detail?.rejectionReason || '',
-      });
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function resetSupplierForm() {
-    setSelectedAdminSupplierId('');
-    setSelectedAdminSupplierKey('');
-    setSupplierForm({ ...initialSupplierForm });
-  }
-
-  async function refreshSelectedSupplier(supplierId = selectedAdminSupplierId) {
-    await loadAdminSuppliers();
-    if (!supplierId) return;
-    try {
-      const detail = await adminModel.getSupplier(request, supplierId);
-      setAdminSuppliers((current) => {
-        const exists = current.some((item) => (item._id || item.id) === supplierId);
-        return exists
-          ? current.map((item) => ((item._id || item.id) === supplierId ? { ...item, ...detail } : item))
-          : [detail, ...current];
-      });
-      setSupplierForm({
-        name: detail?.name || '',
-        legalName: detail?.legalName || '',
-        phone: detail?.phone || '',
-        status: detail?.status || '',
-        featured: Boolean(detail?.featured),
-        internalNotes: detail?.internalNotes || '',
-        rejectionReason: detail?.rejectionReason || '',
-      });
-    } catch {
-      // La lista ya se ha refrescado; si falla el detalle no bloqueamos la vista.
-    }
-  }
-
-  async function setAdminSupplierAction(action, options = {}) {
-    if (!selectedAdminSupplierId) {
-      setNotice('Selecciona un proveedor para gestionarlo.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      if (action === 'approve') await adminModel.approveSupplier(request, selectedAdminSupplierId);
-      if (action === 'reject') await adminModel.rejectSupplier(request, selectedAdminSupplierId, options.reason || supplierForm.rejectionReason || '');
-      if (action === 'deactivate') await adminModel.deactivateSupplier(request, selectedAdminSupplierId);
-      if (action === 'reactivate') await adminModel.reactivateSupplier(request, selectedAdminSupplierId);
-      if (action === 'featured') await adminModel.setSupplierFeatured(request, selectedAdminSupplierId, options.featured);
-      await refreshSelectedSupplier(selectedAdminSupplierId);
-      await loadAdminProducts();
-      await loadProducts();
-      setNotice('Proveedor actualizado correctamente.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveAdminSupplier(event) {
-    event.preventDefault();
-    if (!selectedAdminSupplierId) {
-      setNotice('Selecciona un proveedor para editarlo.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await adminModel.setSupplierInternalNotes(request, selectedAdminSupplierId, supplierForm.internalNotes);
-      await adminModel.setSupplierFeatured(request, selectedAdminSupplierId, Boolean(supplierForm.featured));
-      await refreshSelectedSupplier(selectedAdminSupplierId);
-      setNotice('Notas y destacado del proveedor guardados.');
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteAdminSupplier() {
-    await setAdminSupplierAction('deactivate');
   }
 
   function selectAdminUser(user) {
@@ -1723,13 +1448,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     state: {
       adminTab,
       adminProducts,
-      adminSuppliers,
       adminSearch,
       adminReviews,
       accountReviewForm,
       adminUserForm,
       adminUsers,
-      authFeedback,
       authForm,
       authMode,
       busy,
@@ -1764,11 +1487,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       selectedAdminOrderId,
       selectedAdminCategoryId,
       selectedAdminProductId,
-      selectedAdminSupplierId,
-      selectedAdminSupplierKey,
-      supplierForm,
-      supplierProducts,
-      supplierProfile,
       selectedAdminUser,
       selectedAdminUserId,
       selectedAdminUserOrders,
@@ -1779,7 +1497,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     },
     actions: {
       addToCart,
-      chooseAccountType,
       clearCart,
       createCategory,
       createProduct,
@@ -1795,22 +1512,17 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       handleLogout,
       openProduct,
       openAdminOrder,
-      openAdminTab,
       openAdminUserOrders,
       removeCartItem,
       resetFilters,
       resetCategoryForm,
       resetProductForm,
-      resetSupplierForm,
-      saveAdminSupplier,
-      setAdminSupplierAction,
       saveAdminUser,
       saveAccountReview,
       selectAdminCategory,
       selectAdminProduct,
-      selectAdminSupplier,
       selectAccountReview,
-      setAuthMode: changeAuthMode,
+      setAuthMode,
       setAdminTab,
       setAdminSearch,
       setFilter,
@@ -1836,7 +1548,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       updateImageForm,
       updatePaymentForm,
       updateProductForm,
-      updateSupplierForm,
       updateReviewForm,
       updateShippingForm,
       addProductImageUrl,
@@ -1850,11 +1561,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       resetHomeContent,
       saveHomeContentSettings,
       saveImageUrl,
-      loadSupplierPanel,
       submitProductReview,
       uploadProductImages,
       deleteOrder,
-      deleteAdminSupplier,
     },
   };
 }

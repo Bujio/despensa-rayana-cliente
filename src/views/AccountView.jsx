@@ -1,7 +1,7 @@
-import { ArrowLeft, MessageSquare, PackagePlus, Save, Star, Store, Trash2, UserRound } from 'lucide-react';
+import { MessageSquare, Save, Star, Trash2, UserRound } from 'lucide-react';
 
 export function AccountView({ state, actions }) {
-  const { accountReviewForm, authFeedback, authForm, authMode, busy, myReviews, selectedAccountReviewId, session } = state;
+  const { accountReviewForm, authForm, authMode, busy, myReviews, selectedAccountReviewId, session } = state;
 
   const update = (field) => (event) => actions.updateAuthForm(field, event.target.value);
   const updateReview = (field) => (event) => actions.updateAccountReviewForm(field, event.target.value);
@@ -15,16 +15,6 @@ export function AccountView({ state, actions }) {
             <p>{session.user?.name || session.user?.email}</p>
           </div>
         </div>
-
-        {session.user?.role === 'supplier' && (
-          <section className="wide-panel supplier-account-link">
-            <div className="admin-panel-title"><PackagePlus size={19} /> Panel de proveedor</div>
-            <p>Accede a la gestión de tus productos y revisa el estado de tu solicitud.</p>
-            <button className="primary" type="button" onClick={() => actions.setView('supplier')}>
-              <PackagePlus size={18} /> Gestionar productos
-            </button>
-          </section>
-        )}
 
         <section className="wide-panel account-reviews-panel">
           <div className="admin-panel-title"><MessageSquare size={19} /> Mis opiniones</div>
@@ -74,80 +64,31 @@ export function AccountView({ state, actions }) {
     );
   }
 
-  const isRegister = authMode === 'register';
-  const selectedType = authForm.accountType;
-  const isSupplierRegister = isRegister && selectedType === 'supplier';
-  const isCustomerRegister = isRegister && selectedType === 'customer';
-
   return (
     <section className="account-view">
-      <form className="auth-card account-auth-card" onSubmit={actions.handleAuth}>
-        <div className="auth-card-top">
-          <div className="segmented">
-            <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => actions.setAuthMode('login')}>Entrar</button>
-            <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => actions.setAuthMode('register')}>Crear cuenta</button>
-          </div>
-          <div className="auth-heading-block">
-            <h1>{authMode === 'login' ? 'Accede a tu cuenta' : 'Nueva cuenta'}</h1>
-            {isRegister && (
-              <p>{selectedType ? 'Completa los datos para finalizar el alta.' : 'Elige primero cómo quieres darte de alta.'}</p>
-            )}
-          </div>
+      <form className="auth-card" onSubmit={actions.handleAuth}>
+        <div className="segmented">
+          <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => actions.setAuthMode('login')}>Entrar</button>
+          <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => actions.setAuthMode('register')}>Crear cuenta</button>
         </div>
-
-        {isRegister && !selectedType && (
-          <div className="account-type-step" aria-label="Tipo de cuenta">
-            <button type="button" className="account-type-card" onClick={() => actions.chooseAccountType('customer')}>
-              <span><UserRound size={22} /></span>
-              <strong>Cliente</strong>
-              <small>Compra productos, guarda favoritos y consulta tus pedidos.</small>
-            </button>
-            <button type="button" className="account-type-card" onClick={() => actions.chooseAccountType('supplier')}>
-              <span><Store size={22} /></span>
-              <strong>Proveedor</strong>
-              <small>Solicita vender productos locales y prepara tu catálogo para revisión.</small>
-            </button>
-          </div>
+        <h1>{authMode === 'login' ? 'Accede a tu cuenta' : 'Nueva cuenta'}</h1>
+        {authMode === 'register' && (
+          <>
+            <label>Nombre<input required value={authForm.name} onChange={update('name')} /></label>
+            <label>Teléfono<input value={authForm.phone} onChange={update('phone')} /></label>
+            <label>Calle<input value={authForm.street} onChange={update('street')} /></label>
+            <div className="range-grid">
+              <label>Código postal<input value={authForm.codePostal} onChange={update('codePostal')} /></label>
+              <label>Ciudad<input value={authForm.city} onChange={update('city')} /></label>
+            </div>
+            <label>País<input value={authForm.country} onChange={update('country')} /></label>
+          </>
         )}
-
-        {isRegister && selectedType && (
-          <button className="text-link-button auth-back-button" type="button" onClick={() => actions.chooseAccountType('')}>
-            <ArrowLeft size={16} /> Cambiar tipo de alta
-          </button>
-        )}
-
-        {(authMode === 'login' || isCustomerRegister || isSupplierRegister) && (
-          <div className="auth-form-fields">
-            {isRegister && (
-              <>
-                <label>{isSupplierRegister ? 'Nombre comercial' : 'Nombre'}<input required value={authForm.name} onChange={update('name')} /></label>
-                {isSupplierRegister && (
-                  <>
-                    <label>Razón social<input value={authForm.legalName} onChange={update('legalName')} placeholder="Opcional" /></label>
-                    <label className="wide-auth-field">Descripción del proyecto<textarea value={authForm.description} onChange={update('description')} placeholder="Cuéntanos qué produces y dónde está tu origen" /></label>
-                  </>
-                )}
-                <label>Teléfono<input value={authForm.phone} onChange={update('phone')} /></label>
-                <label>Calle<input value={authForm.street} onChange={update('street')} /></label>
-                <div className="range-grid">
-                  <label>Código postal<input value={authForm.codePostal} onChange={update('codePostal')} /></label>
-                  <label>Ciudad<input value={authForm.city} onChange={update('city')} /></label>
-                </div>
-                <label>País<input value={authForm.country} onChange={update('country')} /></label>
-              </>
-            )}
-            <label>Email<input type="email" required value={authForm.email} onChange={update('email')} /></label>
-            <label>Contraseña<input type="password" required value={authForm.password} onChange={update('password')} /></label>
-            <button className="primary full" type="submit" disabled={busy}>
-              {isSupplierRegister ? <Store size={18} /> : <UserRound size={18} />} {authMode === 'login' ? 'Entrar' : isSupplierRegister ? 'Solicitar alta como proveedor' : 'Crear cuenta'}
-            </button>
-            {authFeedback?.message && (
-              <p className={'form-feedback ' + authFeedback.type} role={authFeedback.type === 'error' ? 'alert' : 'status'}>
-                {authFeedback.message}
-              </p>
-            )}
-          </div>
-        )}
+        <label>Email<input type="email" required value={authForm.email} onChange={update('email')} /></label>
+        <label>Contraseña<input type="password" required value={authForm.password} onChange={update('password')} /></label>
+        <button className="primary full" type="submit" disabled={busy}>
+          <UserRound size={18} /> {authMode === 'login' ? 'Entrar' : 'Crear cuenta'}
+        </button>
       </form>
     </section>
   );

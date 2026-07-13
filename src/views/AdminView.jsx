@@ -1,42 +1,32 @@
 import {
-  BarChart3,
-  Bell,
   Bold,
   ChevronLeft,
   ChevronRight,
   Eye,
-  FileText,
   Heading2,
   Heading3,
-  HelpCircle,
-  Home,
   ImageUp,
   LayoutDashboard,
   Link,
   List,
   MessageSquare,
-  Megaphone,
   MoveDown,
   MoveUp,
   PackagePlus,
-  PanelLeft,
   Percent,
   Plus,
   RotateCcw,
   Save,
   Search,
-  Settings,
-  Store,
   ShoppingBag,
   Tags,
   Trash2,
-  Truck,
   Type,
   Underline,
   UserCog,
   Users,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { formatCurrency } from './viewFormatters.js';
@@ -70,78 +60,11 @@ function includesSearch(values, query) {
 }
 
 function getRoleLabel(role) {
-  if (role === 'admin') return 'Admin';
-  if (role === 'supplier') return 'Proveedor';
-  return 'Cliente';
-}
-
-function getSupplierStatusLabel(status) {
-  const labels = {
-    pending_review: 'Pendiente de revisión',
-    active: 'Activo',
-    inactive: 'Inactivo',
-    draft: 'Borrador',
-    rejected: 'Rechazado',
-  };
-  return labels[status] || 'Sin estado';
-}
-
-function getSupplierStatusTone(status) {
-  if (status === 'active') return 'success';
-  if (status === 'rejected' || status === 'inactive') return 'danger';
-  if (status === 'pending_review') return 'warning';
-  return 'neutral';
-}
-
-function getProductStatus(product) {
-  if (product?.status === 'draft') return ['Borrador', 'neutral'];
-  if (product?.status === 'pending_review') return ['Pendiente', 'warning'];
-  if (product?.status === 'rejected') return ['Rechazado', 'danger'];
-  if (product?.status === 'inactive') return ['Inactivo', 'danger'];
-  if (!productModel.getImage(product)) return ['Sin imagen', 'warning'];
-  if (Number(product.stock || 0) === 0) return ['Agotado', 'danger'];
-  if (Number(product.stock || 0) <= 5) return ['Bajo stock', 'warning'];
-  if (productModel.getOfferLabel(product)) return ['Oferta', 'success'];
-  return ['Publicado', 'success'];
-}
-
-function getSupplierKey(supplier) {
-  return String(supplier?.id ?? supplier?.name ?? '').trim();
-}
-
-function AdminBadge({ tone = 'neutral', children }) {
-  return <span className={'admin-badge ' + tone}>{children}</span>;
-}
-
-function AdminStatCard({ icon: Icon, label, value, detail, tone = 'primary' }) {
-  return (
-    <article className={'admin-stat-card ' + tone}>
-      <span><Icon size={20} /></span>
-      <div>
-        <strong>{value}</strong>
-        <p>{label}</p>
-        {detail && <small>{detail}</small>}
-      </div>
-    </article>
-  );
-}
-
-function AdminPlaceholderSection({ icon: Icon, title, description, children }) {
-  return (
-    <section className="admin-panel admin-placeholder-panel">
-      <div className="admin-panel-title"><Icon size={19} /> {title}</div>
-      <p>{description}</p>
-      {children}
-    </section>
-  );
+  return role === 'admin' ? 'Admin' : 'Cliente';
 }
 
 function getHomeSectionTypeLabel(type) {
   const labels = {
-    hero: 'Hero principal',
-    trust: 'Mensajes de confianza',
-    categories: 'Categorías visuales',
-    featured: 'Productos destacados',
     custom: 'Bloque editorial',
     productCarousel: 'Carrusel de productos',
     promoBanner: 'Banner promocional',
@@ -173,44 +96,25 @@ function OrderDetail({ order }) {
   );
 }
 
-const adminNavigation = [
-  ['dashboard', LayoutDashboard, 'Dashboard'],
-  ['homepage', Home, 'Portada'],
-  ['products', PackagePlus, 'Productos'],
-  ['categories', Tags, 'Categorías'],
-  ['orders', ShoppingBag, 'Pedidos'],
-  ['users', Users, 'Clientes'],
-  ['suppliers', Store, 'Proveedores'],
-  ['offers', Percent, 'Ofertas'],
-  ['content', FileText, 'Contenido'],
-  ['messages', MessageSquare, 'Mensajes'],
-  ['reports', BarChart3, 'Informes'],
-  ['settings', Settings, 'Configuración'],
-];
+function AdminTabs({ active, actions }) {
+  const tabs = [
+    ['homepage', LayoutDashboard, 'Portada'],
+    ['users', Users, 'Clientes'],
+    ['products', PackagePlus, 'Productos'],
+    ['categories', Tags, 'Categorías'],
+    ['orders', ShoppingBag, 'Pedidos'],
+    ['reviews', MessageSquare, 'Opiniones'],
+    ['media', ImageUp, 'Imágenes'],
+  ];
 
-function AdminTabs({ active, actions, pendingSupplierCount = 0, session }) {
   return (
-    <aside className="admin-sidebar" aria-label="Navegación de administración">
-      <div className="admin-sidebar-brand">
-        <strong>La Despensa Rayana</strong>
-        <span>Backoffice</span>
-      </div>
-      <nav>
-        {adminNavigation.map(([key, Icon, label]) => (
-          <button className={active === key ? 'active' : ''} type="button" key={key} onClick={() => actions.openAdminTab(key)}>
-            <Icon size={18} /> <span>{label}</span>
-            {key === 'suppliers' && pendingSupplierCount > 0 && (
-              <strong className="nav-attention-badge">{pendingSupplierCount}</strong>
-            )}
-          </button>
-        ))}
-      </nav>
-      <div className="admin-sidebar-user">
-        <span>{session?.user?.name || 'Administrador'}</span>
-        <small>{session?.user?.email || 'admin'}</small>
-        <button type="button" onClick={actions.handleLogout}>Cerrar sesión</button>
-      </div>
-    </aside>
+    <div className="admin-tabs">
+      {tabs.map(([key, Icon, label]) => (
+        <button className={active === key ? 'active' : ''} type="button" key={key} onClick={() => actions.setAdminTab(key)}>
+          <Icon size={17} /> {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -220,13 +124,10 @@ export function AdminView({ state, actions }) {
   const [adminProductsPage, setAdminProductsPage] = useState(1);
   const [adminCategoriesPage, setAdminCategoriesPage] = useState(1);
   const [selectedHomeSectionId, setSelectedHomeSectionId] = useState('');
-  const shortDescriptionRef = useRef(null);
-  const longDescriptionRef = useRef(null);
   const {
     adminProducts,
     adminReviews,
     adminSearch,
-    adminSuppliers,
     adminTab,
     adminUserForm,
     adminUsers,
@@ -242,9 +143,6 @@ export function AdminView({ state, actions }) {
     selectedAdminOrder,
     selectedAdminOrderId,
     selectedAdminProductId,
-    selectedAdminSupplierId,
-    selectedAdminSupplierKey,
-    supplierForm,
     selectedAdminUser,
     selectedAdminUserId,
     selectedAdminUserOrders,
@@ -305,49 +203,22 @@ export function AdminView({ state, actions }) {
 
   const updateCategory = (field) => (event) => actions.updateCategoryForm(field, event.target.value);
   const updateProduct = (field) => (event) => actions.updateProductForm(field, event.target.value);
-  const applyProductRichFormat = (field, block) => {
-    const refs = {
-      shortDescription: shortDescriptionRef,
-      description: longDescriptionRef,
+  const insertProductDescriptionBlock = (block) => {
+    const snippets = {
+      title: '<h2>Título de sección</h2>',
+      subtitle: '<h3>Subtítulo</h3>',
+      text: '<p>Texto descriptivo del producto.</p>',
+      bold: '<strong>texto destacado</strong>',
+      underline: '<u>texto subrayado</u>',
+      list: '<ul>\n  <li>Punto destacado</li>\n</ul>',
     };
-    const textarea = refs[field]?.current;
-    const currentValue = productForm[field] || '';
-    const selectionStart = textarea?.selectionStart ?? currentValue.length;
-    const selectionEnd = textarea?.selectionEnd ?? currentValue.length;
-    const selectedText = currentValue.slice(selectionStart, selectionEnd);
-    const fallbackText = {
-      title: 'Título de sección',
-      subtitle: 'Subtítulo',
-      text: 'Texto descriptivo del producto.',
-      bold: 'texto destacado',
-      underline: 'texto subrayado',
-      list: 'Punto destacado',
-    }[block];
-    const text = selectedText || fallbackText;
-    const wrappers = {
-      title: ['<h2>', '</h2>'],
-      subtitle: ['<h3>', '</h3>'],
-      text: ['<p>', '</p>'],
-      bold: ['<strong>', '</strong>'],
-      underline: ['<u>', '</u>'],
-      list: ['<ul>\n  <li>', '</li>\n</ul>'],
-    };
-    const [prefix, suffix] = wrappers[block];
-    const formatted = prefix + text + suffix;
-    const nextValue = currentValue.slice(0, selectionStart) + formatted + currentValue.slice(selectionEnd);
-    actions.updateProductForm(field, nextValue);
-
-    window.requestAnimationFrame(() => {
-      textarea?.focus();
-      const start = selectionStart + prefix.length;
-      const end = start + text.length;
-      textarea?.setSelectionRange(start, end);
-    });
+    const currentDescription = productForm.description || '';
+    const separator = currentDescription.trim() ? '\n' : '';
+    actions.updateProductForm('description', currentDescription + separator + snippets[block]);
   };
   const updateImage = (field) => (event) => actions.updateImageForm(field, event.target.value);
   const updateFiles = (event) => actions.updateImageForm('files', Array.from(event.target.files || []));
   const updateUser = (field) => (event) => actions.updateAdminUserForm(field, event.target.value);
-  const updateSupplier = (field) => (event) => actions.updateSupplierForm(field, event.target.value);
   const updateHero = (field) => (event) => actions.updateHomeHero(field, event.target.value);
   const updateComponentForm = (field) => (event) => actions.updateHomeComponentForm(field, event.target.value);
   const uploadHomeImage = (target) => (event) => actions.uploadHomeImage(target, Array.from(event.target.files || []));
@@ -381,78 +252,22 @@ export function AdminView({ state, actions }) {
     review.rating,
   ], adminSearch.reviews));
 
-  const supplierRecords = (adminSuppliers || []).map((supplier) => ({
-    ...supplier,
-    key: getSupplierKey(supplier),
-    products: Array.isArray(supplier.products) ? supplier.products : [],
-  })).sort((first, second) => (first.name || '').localeCompare(second.name || '', 'es'));
-
-  const filteredSuppliers = supplierRecords.filter((supplier) => includesSearch([
-    supplier.name,
-    supplier.legalName,
-    supplier.email,
-    supplier.supplierCode,
-    getSupplierStatusLabel(supplier.status),
-    supplier.products.map((product) => product.name).join(' '),
-    supplier.products.map((product) => product.sku).join(' '),
-  ], adminSearch.suppliers));
-
-  const selectedAdminSupplier = supplierRecords.find((supplier) => (supplier._id || supplier.id) === selectedAdminSupplierId) || null;
-
   const filteredMediaProducts = adminProducts.filter((product) => includesSearch([
     product.name,
     product.sku,
     product.supplier?.name,
   ], adminSearch.media));
 
-  const lowStockProducts = adminProducts.filter((product) => Number(product.stock || 0) > 0 && Number(product.stock || 0) <= 5);
-  const outOfStockProducts = adminProducts.filter((product) => Number(product.stock || 0) === 0);
-  const productsWithoutImage = adminProducts.filter((product) => !productModel.getImage(product));
-  const pendingOrders = orders.filter((order) => ['pending', 'pendiente', 'processing', 'procesando'].includes(String(order.status || 'pending').toLowerCase()));
-  const activeOffers = adminProducts.filter((product) => productModel.getOfferLabel(product));
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const todayOrders = orders.filter((order) => String(order.createdAt || order.date || '').slice(0, 10) === todayKey);
-  const todaySales = todayOrders.reduce((total, order) => total + orderModel.getTotal(order), 0);
-  const recentOrders = [...orders].sort((first, second) => new Date(second.createdAt || second.date || 0) - new Date(first.createdAt || first.date || 0)).slice(0, 5);
-
-  const adminPageMeta = {
-    dashboard: ['Dashboard', 'Resumen operativo de la tienda.'],
-    homepage: ['Mantenimiento de portada', 'Gestiona los contenidos principales de la home de la tienda.'],
-    products: ['Productos', 'Gestiona el catálogo, stock, precios, ofertas e imágenes.'],
-    categories: ['Categorías', 'Organiza los productos de la tienda.'],
-    orders: ['Pedidos', 'Consulta y actualiza el estado de los pedidos.'],
-    users: ['Clientes', 'Gestiona usuarios, roles y datos de cliente.'],
-    suppliers: ['Proveedores', 'Gestiona productores, artesanos y origen de los productos.'],
-    offers: ['Ofertas', 'Controla promociones activas y descuentos del catálogo.'],
-    content: ['Contenido', 'Gestiona textos y bloques informativos de la tienda.'],
-    messages: ['Mensajes', 'Consulta solicitudes y conversaciones recibidas.'],
-    reports: ['Informes', 'Analiza ventas, pedidos y comportamiento del catálogo.'],
-    settings: ['Configuración', 'Ajustes generales de la tienda.'],
-    reviews: ['Opiniones', 'Modera recomendaciones y valoraciones de clientes.'],
-    media: ['Imágenes', 'Gestiona imágenes asociadas a productos reales.'],
-  };
-  const [pageTitle, pageDescription] = adminPageMeta[adminTab] || adminPageMeta.dashboard;
-  const pendingSupplierCount = supplierRecords.filter((supplier) => supplier.status === 'pending_review').length;
-
   return (
-    <section className="admin-view admin-shell">
-      <AdminTabs active={adminTab} actions={actions} pendingSupplierCount={pendingSupplierCount} session={session} />
-      <main className="admin-main">
-        <header className="admin-topbar">
-          <button className="icon-button" type="button" aria-label="Contraer navegación"><PanelLeft size={18} /></button>
-          <div className="admin-page-title">
-            <h1>{pageTitle}</h1>
-            <p>{pageDescription}</p>
-          </div>
-          <label className="input-wrap admin-global-search">
-            <Search size={17} />
-            <input placeholder="Buscar en el backoffice..." onChange={(event) => actions.setAdminSearch(adminTab === 'dashboard' ? 'products' : adminTab, event.target.value)} />
-            <kbd>Ctrl K</kbd>
-          </label>
-          <button className="icon-button" type="button" title="Notificaciones"><Bell size={18} /></button>
-          <button className="icon-button" type="button" title="Ayuda"><HelpCircle size={18} /></button>
-          <div className="admin-avatar">{(session?.user?.name || session?.user?.email || 'A').slice(0, 1).toUpperCase()}</div>
-        </header>
+    <section className="admin-view">
+      <div className="section-heading compact admin-heading">
+        <div>
+          <h1>Backoffice</h1>
+          <p>Gestión por colección con clientes, productos, categorías, pedidos e imágenes.</p>
+        </div>
+      </div>
+
+      <AdminTabs active={adminTab} actions={actions} />
 
       {adminTab === 'homepage' && (
         <div className="homepage-admin-layout">
@@ -653,26 +468,6 @@ export function AdminView({ state, actions }) {
                   </>
                 )}
 
-                {selectedHomeSection.type === 'trust' && (
-                  <div className="category-piece-editor">
-                    {(selectedHomeSection.items || []).map((item, itemIndex) => (
-                      <div className="custom-component-editor" key={selectedHomeSection.id + itemIndex}>
-                        <strong>Mensaje {itemIndex + 1}</strong>
-                        <label>Icono
-                          <select value={item.icon || 'shield-check'} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'icon', event.target.value)}>
-                            <option value="map-pin">Origen / ubicación</option>
-                            <option value="hand-heart">Artesanía</option>
-                            <option value="shield-check">Calidad</option>
-                            <option value="truck">Envío</option>
-                          </select>
-                        </label>
-                        <label>Título<input value={item.title || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'title', event.target.value)} /></label>
-                        <label>Texto<input value={item.body || ''} onChange={(event) => actions.updateHomeSectionItem(selectedHomeSection.id, itemIndex, 'body', event.target.value)} /></label>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
                 {selectedHomeSection.type === 'categories' && (
                   <div className="category-piece-editor">
                     {(selectedHomeSection.items || []).map((item, itemIndex) => (
@@ -768,7 +563,6 @@ export function AdminView({ state, actions }) {
                     <select value={adminUserForm.role} onChange={updateUser('role')}>
                       <option value="user">Cliente</option>
                       <option value="admin">Admin</option>
-                      <option value="supplier">Proveedor</option>
                     </select>
                   </label>
                   <label>Calle<input value={adminUserForm.street} onChange={updateUser('street')} /></label>
@@ -898,33 +692,20 @@ export function AdminView({ state, actions }) {
               </label>
               <label>ID proveedor<input required type="number" min="0" step="1" value={productForm.supplierId} onChange={updateProduct('supplierId')} /></label>
               <label className="wide-field">Proveedor<input value={productForm.supplierName} onChange={updateProduct('supplierName')} placeholder="Ej. Cooperativa local" /></label>
-              <div className="wide-field rich-description-editor compact-rich-editor">
-                <div className="rich-editor-header">
-                  <span>Descripción corta</span>
-                  <div className="rich-editor-toolbar" aria-label="Herramientas de formato para descripción corta">
-                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'title')} title="Título"><Heading2 size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'subtitle')} title="Subtítulo"><Heading3 size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'text')} title="Texto"><Type size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'bold')} title="Negrita"><Bold size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'underline')} title="Subrayado"><Underline size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('shortDescription', 'list')} title="Lista"><List size={16} /></button>
-                  </div>
-                </div>
-                <textarea ref={shortDescriptionRef} value={productForm.shortDescription} onChange={updateProduct('shortDescription')} placeholder="Resumen breve que aparece junto a la valoración y antes del precio. Si se deja vacío, no se mostrará texto corto." />
-              </div>
+              <label className="wide-field">Descripción corta<input value={productForm.shortDescription} onChange={updateProduct('shortDescription')} placeholder="Resumen breve que aparece junto a la valoración y antes del precio" /></label>
               <div className="wide-field rich-description-editor">
                 <div className="rich-editor-header">
                   <span>Descripción larga</span>
-                  <div className="rich-editor-toolbar" aria-label="Herramientas de formato para descripción larga">
-                    <button type="button" onClick={() => applyProductRichFormat('description', 'title')} title="Título"><Heading2 size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('description', 'subtitle')} title="Subtítulo"><Heading3 size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('description', 'text')} title="Texto"><Type size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('description', 'bold')} title="Negrita"><Bold size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('description', 'underline')} title="Subrayado"><Underline size={16} /></button>
-                    <button type="button" onClick={() => applyProductRichFormat('description', 'list')} title="Lista"><List size={16} /></button>
+                  <div className="rich-editor-toolbar" aria-label="Herramientas de formato">
+                    <button type="button" onClick={() => insertProductDescriptionBlock('title')} title="Título"><Heading2 size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('subtitle')} title="Subtítulo"><Heading3 size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('text')} title="Texto"><Type size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('bold')} title="Negrita"><Bold size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('underline')} title="Subrayado"><Underline size={16} /></button>
+                    <button type="button" onClick={() => insertProductDescriptionBlock('list')} title="Lista"><List size={16} /></button>
                   </div>
                 </div>
-                <textarea ref={longDescriptionRef} value={productForm.description} onChange={updateProduct('description')} placeholder="Usa la barra para añadir títulos, subtítulos, texto destacado o listas. Esta descripción aparece en la pestaña Descripción." />
+                <textarea value={productForm.description} onChange={updateProduct('description')} placeholder="Usa la barra para añadir títulos, subtítulos, texto destacado o listas. Esta descripción aparece en la pestaña Descripción." />
               </div>
             </div>
 
@@ -1137,141 +918,6 @@ export function AdminView({ state, actions }) {
         </div>
       )}
 
-
-      {adminTab === 'suppliers' && (
-        <div className="admin-products-layout supplier-admin-layout">
-          <section className="admin-panel">
-            <div className="admin-panel-title"><Store size={19} /> Proveedores</div>
-            <label className="input-wrap admin-search">
-              <Search size={17} />
-              <input value={adminSearch.suppliers} onChange={(event) => actions.setAdminSearch('suppliers', event.target.value)} placeholder="Buscar proveedor, código, estado o producto..." />
-            </label>
-            <div className="admin-list">
-              {filteredSuppliers.length ? filteredSuppliers.map((supplier) => (
-                <article className={'collection-row' + (selectedAdminSupplierId === (supplier._id || supplier.id) ? ' active' : '')} key={supplier._id || supplier.id || supplier.key}>
-                  <button className="user-main" type="button" onClick={() => actions.selectAdminSupplier(supplier)}>
-                    <strong>{supplier.name || 'Proveedor sin nombre'}</strong>
-                    <span>{supplier.supplierCode || 'sin código'} · {supplier.productCount ?? supplier.products.length} productos · {supplier.email || 'sin email'}</span>
-                  </button>
-                  <AdminBadge tone={getSupplierStatusTone(supplier.status)}>{getSupplierStatusLabel(supplier.status)}</AdminBadge>
-                </article>
-              )) : (
-                <div className="empty-state compact-empty">No hay proveedores para mostrar.</div>
-              )}
-            </div>
-          </section>
-
-          <section className="admin-panel supplier-detail-panel">
-            <div className="admin-panel-title"><Store size={19} /> Revisión del proveedor</div>
-            {selectedAdminSupplier ? (
-              <form className="admin-form-grid" onSubmit={actions.saveAdminSupplier}>
-                <label>Código<input readOnly value={selectedAdminSupplier.supplierCode || ''} /></label>
-                <label>Estado<input readOnly value={getSupplierStatusLabel(selectedAdminSupplier.status)} /></label>
-                <label className="wide-field">Nombre<input readOnly value={supplierForm.name} /></label>
-                <label className="wide-field">Razón social<input readOnly value={supplierForm.legalName} /></label>
-                <label>Teléfono<input readOnly value={supplierForm.phone} /></label>
-                <label>Email<input readOnly value={selectedAdminSupplier.email || ''} /></label>
-                <label className="wide-field">Notas internas<textarea value={supplierForm.internalNotes} onChange={updateSupplier('internalNotes')} placeholder="Notas visibles solo para administración" /></label>
-                <label className="checkbox-field wide-field">
-                  <input type="checkbox" checked={Boolean(supplierForm.featured)} onChange={(event) => actions.updateSupplierForm('featured', event.target.checked)} />
-                  Marcar como destacado
-                </label>
-                <div className="wide-field supplier-summary">
-                  <strong>{selectedAdminSupplier.productCount ?? selectedAdminSupplier.products.length}</strong>
-                  <span>productos asociados a este proveedor</span>
-                </div>
-                <div className="form-actions supplier-form-actions wide-field">
-                  <div className="supplier-danger-actions">
-                    <button className="danger-button destructive-action" type="button" onClick={() => actions.setAdminSupplierAction('reject')} disabled={busy || selectedAdminSupplier.status === 'rejected'}><Trash2 size={16} /> Rechazar</button>
-                    <button className="secondary" type="button" onClick={() => actions.setAdminSupplierAction('deactivate')} disabled={busy || selectedAdminSupplier.status === 'inactive'}>Desactivar</button>
-                  </div>
-                  <div className="supplier-save-actions">
-                    <button className="secondary" type="button" onClick={actions.resetSupplierForm}>Cancelar</button>
-                    <button className="secondary" type="button" onClick={() => actions.setAdminSupplierAction('reactivate')} disabled={busy || selectedAdminSupplier.status === 'active'}>Reactivar</button>
-                    <button className="primary" type="button" onClick={() => actions.setAdminSupplierAction('approve')} disabled={busy || selectedAdminSupplier.status === 'active'}>Aprobar proveedor</button>
-                    <button className="primary" type="submit" disabled={busy}>Guardar notas</button>
-                  </div>
-                </div>
-              </form>
-            ) : (
-              <div className="empty-state compact-empty">Selecciona un proveedor para ver y revisar su solicitud.</div>
-            )}
-          </section>
-
-          <section className="admin-panel supplier-products-panel">
-            <div className="admin-panel-title"><ShoppingBag size={19} /> Productos del proveedor</div>
-            {selectedAdminSupplier ? (
-              <div className="admin-list supplier-products-list">
-                {selectedAdminSupplier.products.length ? selectedAdminSupplier.products.map((product) => {
-                  const [statusLabel, statusTone] = getProductStatus(product);
-                  const image = productModel.getImage(product);
-                  return (
-                    <article className="collection-row with-thumb" key={getId(product) || product.sku}>
-                      <div className="admin-thumb">{image ? <img src={image} alt="" /> : <ShoppingBag size={18} />}</div>
-                      <button className="user-main" type="button" onClick={() => { actions.openAdminTab('products'); actions.selectAdminProduct(product); }}>
-                        <strong>{product.name}</strong>
-                        <span>{product.sku} · {formatCurrency(product.price)} · Stock {product.stock ?? 0} · {product.status || 'published'}</span>
-                      </button>
-                      <AdminBadge tone={statusTone}>{statusLabel}</AdminBadge>
-                    </article>
-                  );
-                }) : <div className="empty-state compact-empty">Este proveedor aún no tiene productos.</div>}
-              </div>
-            ) : (
-              <div className="empty-state compact-empty">Los productos aparecerán al seleccionar un proveedor.</div>
-            )}
-          </section>
-        </div>
-      )}
-
-      {adminTab === 'offers' && (
-        <AdminPlaceholderSection icon={Megaphone} title="Ofertas" description="Control operativo de promociones configuradas en productos reales.">
-          <div className="admin-table-like">
-            {activeOffers.length ? activeOffers.map((product) => (
-              <article className="collection-row with-thumb" key={getId(product)}>
-                <div className="admin-thumb">{productModel.getImage(product) ? <img src={productModel.getImage(product)} alt="" /> : <Percent size={20} />}</div>
-                <button className="user-main" type="button" onClick={() => actions.selectAdminProduct(product)}><strong>{product.name}</strong><span>{product.sku} · {productModel.getOfferLabel(product)}</span></button>
-                <AdminBadge tone="success">Activa</AdminBadge>
-              </article>
-            )) : <div className="empty-state compact-empty">No hay ofertas activas.</div>}
-          </div>
-        </AdminPlaceholderSection>
-      )}
-
-      {adminTab === 'content' && (
-        <AdminPlaceholderSection icon={FileText} title="Contenido" description="Área preparada para textos editoriales: Nuestra historia, La Raya, FAQ y bloques informativos.">
-          <div className="admin-empty-actions"><button className="secondary" type="button" onClick={() => actions.openAdminTab('homepage')}>Editar portada</button></div>
-        </AdminPlaceholderSection>
-      )}
-
-      {adminTab === 'messages' && (
-        <AdminPlaceholderSection icon={MessageSquare} title="Mensajes" description="Bandeja preparada para consultas de clientes cuando exista formulario de contacto.">
-          <div className="empty-state compact-empty">No hay mensajes conectados todavía.</div>
-        </AdminPlaceholderSection>
-      )}
-
-      {adminTab === 'reports' && (
-        <AdminPlaceholderSection icon={BarChart3} title="Informes" description="Analítica básica calculada con pedidos y catálogo disponibles.">
-          <div className="admin-report-grid">
-            <AdminStatCard icon={BarChart3} label="Ingresos" value={formatCurrency(orders.reduce((total, order) => total + orderModel.getTotal(order), 0))} />
-            <AdminStatCard icon={ShoppingBag} label="Pedidos" value={orders.length} />
-            <AdminStatCard icon={PackagePlus} label="Productos" value={adminProducts.length} />
-            <AdminStatCard icon={Tags} label="Categorías" value={categories.length} />
-          </div>
-        </AdminPlaceholderSection>
-      )}
-
-      {adminTab === 'settings' && (
-        <AdminPlaceholderSection icon={Settings} title="Configuración" description="Ajustes generales preparados para tienda, envíos, emails, apariencia y seguridad.">
-          <div className="admin-settings-grid">
-            <article><strong>Datos de tienda</strong><span>La Despensa Rayana · contacto y dirección</span></article>
-            <article><strong>Envíos</strong><span>Península 24/48h · costes configurables</span></article>
-            <article><strong>Apariencia</strong><span>Logo, color principal y mensajes de topbar</span></article>
-            <article><strong>Seguridad</strong><span>Usuarios admin y sesiones</span></article>
-          </div>
-        </AdminPlaceholderSection>
-      )}
-
       {adminTab === 'media' && (
         <div className="admin-products-layout">
           <section className="admin-panel media-admin-panel">
@@ -1310,7 +956,6 @@ export function AdminView({ state, actions }) {
           </section>
         </div>
       )}
-      </main>
     </section>
   );
 }

@@ -5,7 +5,6 @@ import { AppView } from './views/AppView.jsx';
 function readRoute(location) {
   const catalogCategoryMatch = matchPath('/catalogo/:categorySlug', location.pathname);
   const productMatch = matchPath('/producto/:productId', location.pathname);
-  const adminMatch = matchPath('/admin/:adminSection', location.pathname);
   if (catalogCategoryMatch) {
     return {
       categorySlug: catalogCategoryMatch.params.categorySlug || '',
@@ -22,14 +21,6 @@ function readRoute(location) {
     };
   }
 
-  if (location.pathname === '/admin' || adminMatch) {
-    return {
-      categorySlug: '',
-      productId: '',
-      view: 'admin',
-    };
-  }
-
   const routeViews = {
     '/': 'home',
     '/catalogo': 'catalog',
@@ -38,7 +29,6 @@ function readRoute(location) {
     '/pedidos': 'orders',
     '/cuenta': 'account',
     '/gestion': 'admin',
-    '/supplier': 'supplier',
   };
 
   return {
