@@ -6,8 +6,6 @@ function cartItemsToOrderProducts(items) {
   return items.map((item) => ({
     sku: item.sku,
     count: item.quantity || item.count,
-    price: item.price,
-    discount: item.discount || 0,
   }));
 }
 
@@ -21,18 +19,25 @@ export const orderModel = {
     const result = await request('/orders/client/' + encodeURIComponent(email));
     return getList(result);
   },
-  createFromCart(request, email, items, shippingAddress) {
+  createFromCart(request, email, items, shippingAddress, paymentMethod = 'external_pending') {
     return request('/orders', {
       method: 'POST',
       body: JSON.stringify({
         email,
         shippingAddress,
+        paymentMethod,
         products: cartItemsToOrderProducts(items),
       }),
     });
   },
   delete(request, orderId) {
     return request('/orders/' + orderId, { method: 'DELETE' });
+  },
+  cancel(request, orderId, reason = '') {
+    return request('/orders/' + orderId + '/cancel', {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
   },
   getTotal(order) {
     return order.total || order.products?.reduce((sum, item) => sum + item.price * item.count, 0) || 0;

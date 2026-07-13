@@ -13,9 +13,17 @@ const commerceSections = [
   'La Rayana',
 ];
 
-export function Header({ cartCount, busy, filters, session, view, onCommerceCategory, onFavorites, onLogout, onSearch, onViewChange }) {
+export function Header({ cartCount, cartFeedback, busy, filters, session, onCommerceCategory, onDismissCartFeedback, onFavorites, onLogout, onSearch, onViewChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+
+  useEffect(() => {
+    if (!cartFeedback) return undefined;
+    const timeout = window.setTimeout(() => {
+      onDismissCartFeedback?.();
+    }, 1500);
+    return () => window.clearTimeout(timeout);
+  }, [cartFeedback?.id, onDismissCartFeedback]);
 
   const goTo = (nextView) => {
     onViewChange(nextView);
@@ -34,7 +42,7 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
     <header className="site-header">
       <div className="announcement-bar">
         <span>Envíos a toda España peninsular en 24/48h</span>
-        <span>Productos de origen extremeño</span>
+        <span>Productos de origen rayano</span>
       </div>
 
       <div className="topbar">
@@ -65,6 +73,9 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
               {accountOpen && (
                 <div className="account-menu">
                   <strong>{session.user?.name || session.user?.email}</strong>
+                  <button className="account-menu-primary" type="button" onClick={() => goTo('account')}>
+                    <LayoutDashboard size={16} /> Mi panel
+                  </button>
                   <button type="button" onClick={() => {
                     onFavorites();
                     setAccountOpen(false);
@@ -86,6 +97,12 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
             <ShoppingBag size={18} />
             <span>{cartCount}</span>
           </button>
+          {cartFeedback && (
+            <div className="cart-mini-toast" role="status">
+              <CheckCircle2 size={16} />
+              <span>Añadido a cesta</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -97,7 +114,12 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
         ))}
       </nav>
 
-      <div className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')} onClick={() => setMenuOpen(false)} />
+      <button
+        className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')}
+        type="button"
+        onClick={() => setMenuOpen(false)}
+        aria-label="Cerrar menú"
+      />
       <aside className={'mobile-menu' + (menuOpen ? ' open' : '')} aria-hidden={!menuOpen}>
         <div className="mobile-menu-head">
           <strong>La Despensa Rayana</strong>
@@ -118,7 +140,7 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
           ))}
         </div>
         <div className="mobile-access">
-          <button type="button" onClick={() => goTo('account')}>Mi cuenta</button>
+          <button type="button" onClick={() => goTo('account')}>Mi panel</button>
           <button type="button" onClick={() => goTo('orders')}>Mis pedidos</button>
           <button type="button" onClick={() => {
             onFavorites();

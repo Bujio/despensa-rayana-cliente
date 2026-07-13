@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "echo \"No frontend lint configuration yet\"",
+    "lint": "eslint .",
     "audit": "npm audit --audit-level=moderate",
     "seed:extremadura": "node scripts/seed-extremadura-products.mjs"
   },
@@ -19,5 +19,13 @@
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.18.1",
     "vite": "^7.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0"
   }
 }

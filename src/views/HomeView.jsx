@@ -15,9 +15,20 @@ import { useRef } from 'react';
 import { ProductCard } from './ProductCard.jsx';
 import { productModel } from '../models/productModel.js';
 import { categoryVisualModel } from '../models/categoryVisualModel.js';
+import { isPublicHomeSection } from '../models/homeContentModel.js';
+import { CmsResponsiveImage } from '../components/cms/CmsResponsiveImage.jsx';
 
 const categoryIcons = [Leaf, BadgeCheck, HandHeart, Gift];
 const defaultHeroImage = '/camino-extremadura.png';
+
+function cmsAttrs(section, item = null) {
+  return {
+    'data-cms-section-id': section?.id || '',
+    'data-cms-section-type': section?.type || '',
+    'data-cms-tracking-id': item?.trackingId || section?.trackingId || '',
+    'data-cms-campaign': item?.campaignName || section?.campaignName || '',
+  };
+}
 
 function getProductId(product) {
   return String(product?._id || product?.id || product?.sku || '');
@@ -53,7 +64,7 @@ function ProductCarouselSection({
   };
 
   return (
-    <section className="home-section">
+    <section className="home-section" {...cmsAttrs(section)}>
       <div className="section-heading compact">
         <div>
           {section.subtitle && <span className="eyebrow">{section.subtitle}</span>}
@@ -67,7 +78,7 @@ function ProductCarouselSection({
           <button className="carousel-control" type="button" onClick={() => scroll(-1)} aria-label="Ver productos anteriores">
             <ChevronLeft size={18} />
           </button>
-          <div className="featured-carousel" ref={carouselRef} tabIndex={0} aria-label={section.title}>
+          <div className="featured-carousel" ref={carouselRef} aria-label={section.title}>
             {sectionProducts.map((product) => (
               <ProductCard
                 key={product._id || product.id || product.sku}
@@ -105,7 +116,7 @@ export function HomeView({ state, actions }) {
   } = state;
   const hero = homeContent?.hero || {};
   const activeSections = (homeContent?.sections || [])
-    .filter((section) => section.enabled !== false)
+    .filter((section) => isPublicHomeSection(section))
     .sort((first, second) => first.order - second.order);
   const selectedFeaturedIds = homeContent?.featuredProductIds || [];
 
@@ -125,7 +136,7 @@ export function HomeView({ state, actions }) {
     .filter((product) => !selectedFeaturedIds.length || selectedFeaturedIds.includes(getProductId(product)));
   const heroEyebrow = hero.eyebrow ?? 'Origen extremeno - Espiritu rayano';
   const heroTitle = hero.title ?? 'Sabores que cruzan fronteras, tradicion que nos une.';
-  const heroDescription = hero.description ?? 'Productos de origen extremeno de la zona de La Raya.';
+  const heroDescription = hero.description ?? 'Productos de origen rayano de la zona de La Raya.';
   const heroPrimaryLabel = hero.primaryLabel ?? 'Descubre productos';
   const heroSecondaryLabel = hero.secondaryLabel ?? 'Nuestra historia';
 
@@ -155,7 +166,11 @@ export function HomeView({ state, actions }) {
   const renderHero = () => (
     <div
       className="brand-hero"
-      style={{ '--hero-image': `url("${hero.imageUrl || defaultHeroImage}")` }}
+      style={{
+        '--hero-image': `url("${hero.imageUrl || defaultHeroImage}")`,
+        '--hero-mobile-image': `url("${hero.mobileImageUrl || hero.imageUrl || defaultHeroImage}")`,
+      }}
+      {...cmsAttrs({ id: 'hero', type: 'hero', ...hero })}
     >
         <div className="hero-copy">
           {heroEyebrow !== '' && <span className="eyebrow">{heroEyebrow}</span>}
@@ -209,12 +224,16 @@ export function HomeView({ state, actions }) {
           caption: item.title || fallback.caption || fallback.name,
           description: item.body || fallback.description || 'Ver selección',
           image: item.imageUrl || fallback.image || '',
+          mobileImage: item.mobileImageUrl || fallback.mobileImageUrl || item.imageUrl || fallback.image || '',
+          altText: item.altText || fallback.altText || item.title || fallback.name || 'Categoría',
           linkUrl: item.linkUrl || fallback.linkUrl || item.title || fallback.name,
+          trackingId: item.trackingId || '',
+          campaignName: item.campaignName || '',
         };
       });
 
     return (
-      <section className="home-section">
+      <section className="home-section" {...cmsAttrs(section)}>
         <div className="section-heading compact">
           <div>
             <h1>{section.title || 'Explora nuestras categorías'}</h1>
@@ -233,9 +252,13 @@ export function HomeView({ state, actions }) {
                 type="button"
                 key={category.name}
                 onClick={() => openCategoryTile(category)}
+                {...cmsAttrs(section, category)}
               >
                 {category.image ? (
-                  <img src={category.image} alt="" />
+                  <picture>
+                    {category.mobileImage && <source media="(max-width: 720px)" srcSet={category.mobileImage} />}
+                    <img src={category.image} alt={category.altText || category.name} />
+                  </picture>
                 ) : (
                   <Icon size={21} />
                 )}
@@ -249,8 +272,8 @@ export function HomeView({ state, actions }) {
     );
   };
 
-  const renderFeatured = () => (
-      <section className="home-section">
+  const renderFeatured = (section) => (
+      <section className="home-section" {...cmsAttrs(section)}>
         <div className="section-heading compact">
           <div>
             <h1>Productos destacados</h1>
@@ -268,7 +291,7 @@ export function HomeView({ state, actions }) {
             <button className="carousel-control" type="button" onClick={() => scrollFeatured(-1)} aria-label="Ver productos anteriores">
               <ChevronLeft size={18} />
             </button>
-            <div className="featured-carousel" ref={featuredCarouselRef} tabIndex={0} aria-label="Productos destacados">
+            <div className="featured-carousel" ref={featuredCarouselRef} aria-label="Productos destacados">
               {carouselProducts.map((product) => (
                 <ProductCard
                   key={product._id || product.id || product.sku}
@@ -297,7 +320,7 @@ export function HomeView({ state, actions }) {
   );
 
   const renderCustomSection = (section) => (
-    <section className="home-section custom-home-band">
+    <section className="home-section custom-home-band" {...cmsAttrs(section)}>
       <div>
         {section.subtitle && <span className="eyebrow">{section.subtitle}</span>}
         <h1>{section.title}</h1>
@@ -322,8 +345,8 @@ export function HomeView({ state, actions }) {
   };
 
   const renderPromoBanner = (section) => (
-    <section className="promo-banner-section">
-      {section.imageUrl && <img src={section.imageUrl} alt="" />}
+    <section className="promo-banner-section" {...cmsAttrs(section)}>
+      <CmsResponsiveImage source={section} fallbackAlt={section.title || 'Banner promocional'} />
       <div>
         {section.subtitle && <span className="eyebrow">{section.subtitle}</span>}
         <h1>{section.title}</h1>
@@ -336,7 +359,7 @@ export function HomeView({ state, actions }) {
   );
 
   const renderPromoBannerGrid = (section) => (
-    <section className="home-section">
+    <section className="home-section" {...cmsAttrs(section)}>
       <div className="section-heading compact">
         <div>
           {section.subtitle && <span className="eyebrow">{section.subtitle}</span>}
@@ -346,8 +369,14 @@ export function HomeView({ state, actions }) {
       </div>
       <div className="promo-banner-grid">
         {(section.items || []).map((item, index) => (
-          <button className="promo-banner-card" type="button" key={(item.title || 'banner') + index} onClick={() => openSectionLink(item.linkUrl)}>
-            {item.imageUrl && <img src={item.imageUrl} alt="" />}
+          <button
+            className="promo-banner-card"
+            type="button"
+            key={(item.title || 'banner') + index}
+            onClick={() => openSectionLink(item.linkUrl)}
+            {...cmsAttrs(section, item)}
+          >
+            <CmsResponsiveImage source={item} fallbackAlt={item.title || 'Promoción'} />
             <span>
               <strong>{item.title || 'Promoción'}</strong>
               {item.body && <small>{item.body}</small>}
@@ -362,7 +391,7 @@ export function HomeView({ state, actions }) {
     if (section.type === 'hero') return renderHero();
     if (section.type === 'trust') return renderTrust();
     if (section.type === 'categories') return renderCategories(section);
-    if (section.type === 'featured') return renderFeatured();
+    if (section.type === 'featured') return renderFeatured(section);
     if (section.type === 'productCarousel') return (
       <ProductCarouselSection
         actions={actions}

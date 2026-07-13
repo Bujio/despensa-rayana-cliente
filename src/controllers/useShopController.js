@@ -11,11 +11,20 @@ import { homeContentModel } from '../models/homeContentModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { sessionModel } from '../models/sessionModel.js';
 import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
+import {
+  trackAddToCart,
+  trackBeginCheckout,
+  trackProductView,
+  trackPurchase,
+  trackRemoveFromCart,
+} from '../utils/analytics.js';
 
 const initialAuthForm = {
   name: '',
   email: '',
   password: '',
+  confirmPassword: '',
+  resetToken: '',
   phone: '',
   street: '',
   codePostal: '',
@@ -40,6 +49,7 @@ const initialProductForm = {
   supplierName: '',
   supplierImages: [],
   images: [],
+  status: 'pending_review',
   offerType: 'none',
   offerValue: '',
   offerBundleQuantity: '3',
@@ -65,27 +75,51 @@ const initialImageForm = {
   imageName: '',
 };
 
+const initialMessageReplyForm = {
+  message: '',
+};
+
 const initialHomeComponentForm = {
   type: 'promoBanner',
   title: '',
   subtitle: '',
   body: '',
   imageUrl: '',
+  mobileImageUrl: '',
+  altText: '',
   linkUrl: '',
   ctaLabel: '',
+  status: 'published',
+  startDate: '',
+  endDate: '',
+  priority: '0',
+  trackingId: '',
+  campaignName: '',
   productIds: [],
   itemOneTitle: '',
   itemOneBody: '',
   itemOneImageUrl: '',
+  itemOneMobileImageUrl: '',
+  itemOneAltText: '',
   itemOneLinkUrl: '',
+  itemOneTrackingId: '',
+  itemOneCampaignName: '',
   itemTwoTitle: '',
   itemTwoBody: '',
   itemTwoImageUrl: '',
+  itemTwoMobileImageUrl: '',
+  itemTwoAltText: '',
   itemTwoLinkUrl: '',
+  itemTwoTrackingId: '',
+  itemTwoCampaignName: '',
   itemThreeTitle: '',
   itemThreeBody: '',
   itemThreeImageUrl: '',
+  itemThreeMobileImageUrl: '',
+  itemThreeAltText: '',
   itemThreeLinkUrl: '',
+  itemThreeTrackingId: '',
+  itemThreeCampaignName: '',
 };
 
 const initialAdminUserForm = {
@@ -100,11 +134,20 @@ const initialAdminUserForm = {
   password: '',
 };
 
+const initialAccountProfileForm = {
+  name: '',
+  email: '',
+  phone: '',
+  street: '',
+  codePostal: '',
+  city: '',
+  country: '',
+  password: '',
+};
+
 const initialPaymentForm = {
-  holder: '',
-  cardNumber: '',
-  expiry: '',
-  cvc: '',
+  method: 'external_pending',
+  accepted: false,
 };
 
 const getShippingDefaults = (session) => ({
@@ -113,6 +156,17 @@ const getShippingDefaults = (session) => ({
   city: session?.user?.address?.city || '',
   country: session?.user?.address?.country || 'España',
   phone: session?.user?.phone || '',
+});
+
+const getAccountProfileDefaults = (session) => ({
+  name: session?.user?.name || '',
+  email: session?.user?.email || '',
+  phone: session?.user?.phone || '',
+  street: session?.user?.address?.street || '',
+  codePostal: session?.user?.address?.codePostal || '',
+  city: session?.user?.address?.city || '',
+  country: session?.user?.address?.country || 'España',
+  password: '',
 });
 
 const validateShippingForm = (form) => {
@@ -127,14 +181,10 @@ const validateShippingForm = (form) => {
 
 const validatePaymentForm = (form) => {
   const errors = {};
-  const cardNumber = form.cardNumber.replace(/\s/g, '');
-  const cvc = form.cvc.trim();
-  const expiry = form.expiry.trim();
-
-  if (form.holder.trim().length < 3) errors.holder = 'Indica el titular de la tarjeta.';
-  if (!/^\d{13,19}$/.test(cardNumber)) errors.cardNumber = 'La tarjeta debe tener entre 13 y 19 números.';
-  if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry)) errors.expiry = 'Usa el formato MM/AA.';
-  if (!/^\d{3,4}$/.test(cvc)) errors.cvc = 'El CVC debe tener 3 o 4 números.';
+  if (!form.method) errors.method = 'Selecciona una forma de pago.';
+  if (!form.accepted) {
+    errors.accepted = 'Confirma que entiendes que el pago se completará mediante pasarela segura externa.';
+  }
   return errors;
 };
 
@@ -154,6 +204,7 @@ const routeByView = {
   story: '/la-rayana',
   orders: '/pedidos',
   account: '/cuenta',
+  accountRegister: '/cuenta/registro',
   admin: '/gestion',
 };
 
@@ -164,12 +215,13 @@ function buildRoute(view, { categorySlug = '', productId = '' } = {}) {
 }
 
 function assignHomeImage(content, target, imageUrl) {
-  if (target === 'hero.imageUrl') {
+  if (target === 'hero.imageUrl' || target === 'hero.mobileImageUrl') {
+    const [, field] = target.split('.');
     return {
       ...content,
       hero: {
         ...content.hero,
-        imageUrl,
+        [field]: imageUrl,
       },
     };
   }
@@ -185,7 +237,11 @@ function assignHomeImage(content, target, imageUrl) {
           title: '',
           body: '',
           imageUrl: '',
+          mobileImageUrl: '',
+          altText: '',
           linkUrl: '',
+          trackingId: '',
+          campaignName: '',
           ...(items[Number(itemIndex)] || {}),
           [field]: imageUrl,
         };
@@ -214,20 +270,35 @@ const hasClientSideFilters = (filters) => Boolean(
   filters.categoryGroupIds?.length,
 );
 
-export function useShopController({ navigate, routeCategorySlug = '', routePath = '/', routeProductId = '', routeView = 'home' } = {}) {
+export function useShopController({
+  navigate,
+  routeCategorySlug = '',
+  routePath = '/',
+  routeSearch = '',
+  routeProductId = '',
+  routeView = 'home',
+} = {}) {
   const [session, setSession] = useState(() => sessionModel.get());
   const [products, setProducts] = useState([]);
   const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [relatedProducts, setRelatedProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productReviews, setProductReviews] = useState([]);
   const [myReviews, setMyReviews] = useState([]);
   const [adminReviews, setAdminReviews] = useState([]);
   const [reviewForm, setReviewForm] = useState(() => ({ ...emptyReviewForm }));
+  const [productContactForm, setProductContactForm] = useState(() => ({ ...emptySupplierContactForm }));
+  const [productContactFeedback, setProductContactFeedback] = useState(null);
   const [accountReviewForm, setAccountReviewForm] = useState(() => ({ ...emptyReviewForm }));
+  const [accountProfileForm, setAccountProfileForm] = useState(() => ({ ...initialAccountProfileForm }));
   const [selectedAccountReviewId, setSelectedAccountReviewId] = useState('');
+  const [accountSupplierMessages, setAccountSupplierMessages] = useState([]);
+  const [selectedAccountMessageId, setSelectedAccountMessageId] = useState('');
+  const [accountMessageReplyForm, setAccountMessageReplyForm] = useState(() => ({ ...initialMessageReplyForm }));
   const [loadingProductDetail, setLoadingProductDetail] = useState(false);
   const [categories, setCategories] = useState([]);
   const [cart, setCart] = useState(null);
+  const [cartFeedback, setCartFeedback] = useState(null);
   const [orders, setOrders] = useState([]);
   const [filters, setFilters] = useState(() => ({ ...emptyFilters }));
   const [favoriteIds, setFavoriteIds] = useState(() => favoritesModel.getAll());
@@ -235,7 +306,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [pagination, setPagination] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [notice, setNotice] = useState('');
+  const [notice, setNoticeState] = useState('');
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState(() => ({ ...initialAuthForm }));
   const [adminTab, setAdminTab] = useState('users');
@@ -251,11 +322,22 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [productForm, setProductForm] = useState(() => ({ ...initialProductForm }));
   const [imageForm, setImageForm] = useState(() => ({ ...initialImageForm }));
   const [homeContent, setHomeContent] = useState(() => homeContentModel.load());
+  const [homeContentRevisions, setHomeContentRevisions] = useState([]);
   const [homeComponentForm, setHomeComponentForm] = useState(() => ({ ...initialHomeComponentForm }));
   const [checkoutStep, setCheckoutStep] = useState('items');
   const [shippingForm, setShippingForm] = useState(() => getShippingDefaults(session));
   const [paymentForm, setPaymentForm] = useState(() => ({ ...initialPaymentForm }));
   const [checkoutErrors, setCheckoutErrors] = useState({});
+
+  useEffect(() => {
+    if (routeView !== 'account' || !routeSearch) return;
+    const params = new URLSearchParams(routeSearch);
+    const resetToken = params.get('resetToken');
+    if (!resetToken) return;
+    setAuthMode('reset');
+    setAuthFeedback(null);
+    setAuthForm((current) => ({ ...current, resetToken }));
+  }, [routeSearch, routeView]);
 
   const cartItems = cart?.items || [];
   const cartTotal = useMemo(
@@ -305,6 +387,16 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     else sessionModel.clear();
   };
 
+  const setNotice = (message) => {
+    if (isInvalidSessionMessage(message)) {
+      setSession(null);
+      sessionModel.clear();
+      setNoticeState('');
+      return;
+    }
+    setNoticeState(message);
+  };
+
   const request = (path, options) => apiRequest(path, options, session, applySession);
 
   const setView = (nextView, options = {}) => {
@@ -328,12 +420,19 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     if (routeView !== 'product') {
       setSelectedProduct(null);
       setProductReviews([]);
+      setRelatedProducts([]);
     }
   }, [routeView]);
 
   async function loadHomeContent() {
     try {
-      setHomeContent(await homeContentModel.loadRemote(apiRequest));
+      setHomeContent(await homeContentModel.loadRemote(apiRequest, {
+        admin: session?.user?.role === 'admin',
+      }));
+      if (session?.user?.role === 'admin') {
+        const result = await adminModel.listHomeContentRevisions(request);
+        setHomeContentRevisions(Array.isArray(result?.revisions) ? result.revisions : []);
+      }
     } catch {
       setHomeContent(homeContentModel.load());
     }
@@ -351,14 +450,19 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   useEffect(() => {
     if (session) {
+      setAccountProfileForm(getAccountProfileDefaults(session));
       setShippingForm(getShippingDefaults(session));
       loadCart();
       loadOrders();
       loadMyReviews();
+      loadAccountSupplierMessages();
       if (session.user?.role === 'admin') {
         loadAdminProducts();
         loadAdminUsers();
         loadAdminReviews();
+      }
+      if (session.user?.role === 'supplier') {
+        loadSupplierPanel();
       }
     } else {
       setCart(null);
@@ -366,8 +470,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setMyReviews([]);
       setAdminReviews([]);
       setReviewForm({ ...emptyReviewForm });
+      setProductContactForm({ ...emptySupplierContactForm });
+      setProductContactFeedback(null);
       setAccountReviewForm({ ...emptyReviewForm });
+      setAccountProfileForm({ ...initialAccountProfileForm });
       setSelectedAccountReviewId('');
+      setAccountSupplierMessages([]);
+      setSelectedAccountMessageId('');
+      setAccountMessageReplyForm({ ...initialMessageReplyForm });
       setAdminProducts([]);
       setAdminUsers([]);
       setAdminUserForm({ ...initialAdminUserForm });
@@ -437,12 +547,15 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     if (!productId) return;
 
     setSelectedProduct(product);
+    setRelatedProducts([]);
     setView('product', { productId });
     setLoadingProductDetail(true);
     await loadProductReviews(productId);
     try {
       const fullProduct = await catalogModel.getProduct(productId);
       setSelectedProduct(fullProduct);
+      trackProductView(fullProduct);
+      await loadRelatedProducts(fullProduct);
       await loadProductReviews(productId);
     } catch (error) {
       setNotice(error.message);
@@ -460,12 +573,34 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     try {
       const fullProduct = await catalogModel.getProduct(productId);
       setSelectedProduct(fullProduct);
+      trackProductView(fullProduct);
+      await loadRelatedProducts(fullProduct);
       await loadProductReviews(productId);
     } catch (error) {
       setNotice(error.message);
       setSelectedProduct(null);
+      setRelatedProducts([]);
     } finally {
       setLoadingProductDetail(false);
+    }
+  }
+
+  async function loadRelatedProducts(product) {
+    try {
+      const localRelated = filterRelatedProducts([...featuredProducts, ...products], product);
+      if (localRelated.length >= 4) {
+        setRelatedProducts(localRelated);
+        return;
+      }
+
+      const result = await catalogModel.listProducts({
+        page: 1,
+        filters: { ...emptyFilters, inStock: false },
+        limit: 100,
+      });
+      setRelatedProducts(filterRelatedProducts([...localRelated, ...(result.products || [])], product));
+    } catch {
+      setRelatedProducts(filterRelatedProducts([...featuredProducts, ...products], product));
     }
   }
 
@@ -484,6 +619,15 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setMyReviews(await reviewModel.listMine(request));
     } catch {
       setMyReviews([]);
+    }
+  }
+
+  async function loadAccountSupplierMessages() {
+    if (!session?.accessToken) return;
+    try {
+      setAccountSupplierMessages(await supplierMessageModel.listMine(request));
+    } catch {
+      setAccountSupplierMessages([]);
     }
   }
 
@@ -537,11 +681,116 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  const updateAccountProfileForm = (field, value) => {
+    setAccountProfileForm((current) => ({ ...current, [field]: value }));
+  };
+
+  async function saveAccountProfile(event) {
+    event.preventDefault();
+    const userId = session?.user?._id || session?.user?.id;
+    if (!userId) return;
+
+    setBusy(true);
+    try {
+      const updated = await userModel.update(request, userId, accountProfileForm);
+      const nextSession = {
+        ...session,
+        user: {
+          ...session.user,
+          ...updated,
+        },
+      };
+      applySession(nextSession);
+      setAccountProfileForm(getAccountProfileDefaults(nextSession));
+      setNotice('Datos de perfil actualizados correctamente.');
+    } catch (error) {
+      setNotice(translateAuthMessage(error.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteOwnAccount() {
+    const userId = session?.user?._id || session?.user?.id;
+    if (!userId) return;
+    if (!window.confirm('¿Seguro que quieres eliminar tu cuenta? Esta acción cerrará tu sesión.')) return;
+
+    setBusy(true);
+    try {
+      await userModel.delete(request, userId);
+      applySession(null);
+      setOrders([]);
+      setCart(null);
+      setView('home');
+      setNotice('Tu cuenta se ha eliminado correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelOrder(order, reason = 'Cancelado por el cliente') {
+    const orderId = order?._id || order?.id;
+    if (!orderId || !session) return;
+    if ((order.status || 'pending') !== 'pending') {
+      setNotice('Solo puedes anular pedidos en estado pendiente.');
+      return;
+    }
+    if (!window.confirm('¿Quieres anular este pedido pendiente?')) return;
+
+    setBusy(true);
+    try {
+      await orderModel.cancel(request, orderId, reason);
+      await loadOrders();
+      await loadProducts();
+      await loadFeaturedProducts();
+      if (session.user?.role === 'admin') {
+        await loadAdminProducts();
+        await loadAdminSuppliers();
+      }
+      if (session.user?.role === 'supplier') {
+        await loadSupplierPanel();
+      }
+      setNotice('Pedido anulado correctamente. El stock vuelve a estar disponible y queda registrado el abono.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleAuth(event) {
     event.preventDefault();
     setBusy(true);
     setNotice('');
     try {
+      if (authMode === 'forgot') {
+        await authModel.requestPasswordReset(authForm.email);
+        setAuthFeedback({
+          type: 'success',
+          message: 'Si el email existe, te enviaremos un enlace para crear una nueva contraseña.',
+        });
+        return;
+      }
+
+      if (authMode === 'reset') {
+        if (!authForm.resetToken) {
+          setAuthFeedback({ type: 'error', message: 'El enlace de recuperación no es válido o está incompleto.' });
+          return;
+        }
+        if (authForm.password !== authForm.confirmPassword) {
+          setAuthFeedback({ type: 'error', message: 'Las contraseñas no coinciden.' });
+          return;
+        }
+        await authModel.resetPassword(authForm.resetToken, authForm.password);
+        setAuthMode('login');
+        setAuthForm({ ...initialAuthForm });
+        if (navigate) navigate('/cuenta', { replace: true });
+        setAuthFeedback({ type: 'success', message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' });
+        return;
+      }
+
       if (authMode === 'login') {
         const next = await authModel.login(authForm.email, authForm.password);
         applySession(next);
@@ -597,7 +846,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setBusy(true);
     try {
       setCart(await cartModel.addItem(request, product, quantity));
-      setNotice(product.name + ' añadido al carrito');
+      trackAddToCart(product, quantity);
+      setCartFeedback({
+        id: Date.now(),
+        productName: formatNoticeProductName(product.name),
+        quantity,
+      });
+      setCheckoutStep('items');
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -621,6 +876,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setBusy(true);
     try {
       setCart(await cartModel.removeItem(request, item));
+      trackRemoveFromCart(item);
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -629,9 +885,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }
 
   async function clearCart() {
+    if (!window.confirm('¿Vaciar todos los productos de la cesta?')) return;
     setBusy(true);
     try {
       setCart(await cartModel.clear(request));
+      setCartFeedback(null);
       setCheckoutStep('items');
       setCheckoutErrors({});
     } catch (error) {
@@ -655,9 +913,126 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setReviewForm((current) => ({ ...current, [field]: value }));
   };
 
+  const updateProductContactForm = (field, value) => {
+    setProductContactFeedback(null);
+    setProductContactForm((current) => ({ ...current, [field]: value }));
+  };
+
   const updateAccountReviewForm = (field, value) => {
     setAccountReviewForm((current) => ({ ...current, [field]: value }));
   };
+
+  const updateSupplierMessageReplyForm = (field, value) => {
+    setSupplierMessageReplyForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateAccountMessageReplyForm = (field, value) => {
+    setAccountMessageReplyForm((current) => ({ ...current, [field]: value }));
+  };
+
+  async function sendProductContactMessage(event) {
+    event.preventDefault();
+    const productId = selectedProduct?._id || selectedProduct?.id;
+    if (!session) {
+      setProductContactFeedback({ type: 'error', message: 'Entra en tu cuenta para contactar con el proveedor.' });
+      setView('account');
+      return;
+    }
+    if (session.user?.role === 'supplier') {
+      setProductContactFeedback({ type: 'error', message: 'Los proveedores no pueden contactar consigo mismos desde la ficha de producto.' });
+      return;
+    }
+    if (!productId || productContactForm.message.trim().length < 3) {
+      setProductContactFeedback({ type: 'error', message: 'Escribe un mensaje de al menos 3 caracteres.' });
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await supplierMessageModel.createForProduct(request, productId, productContactForm);
+      setProductContactForm({ ...emptySupplierContactForm });
+      await loadAccountSupplierMessages();
+      setProductContactFeedback({ type: 'success', message: 'Mensaje enviado al proveedor. Podrás ver la respuesta en Mi cuenta.' });
+    } catch (error) {
+      setProductContactFeedback({ type: 'error', message: error.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function selectSupplierMessage(thread) {
+    const threadId = thread?._id || thread?.id || '';
+    setSelectedSupplierMessageId(threadId);
+    setSupplierMessageReplyForm({ ...initialMessageReplyForm });
+    if (!threadId) return;
+    try {
+      const updated = await supplierMessageModel.markRead(request, threadId);
+      setSupplierMessages((current) => current.map((item) => (
+        (item._id || item.id) === threadId ? updated : item
+      )));
+    } catch {
+      // La lectura no debe bloquear la selección del mensaje.
+    }
+  }
+
+  async function selectAccountSupplierMessage(thread) {
+    const threadId = thread?._id || thread?.id || '';
+    setSelectedAccountMessageId(threadId);
+    setAccountMessageReplyForm({ ...initialMessageReplyForm });
+    if (!threadId) return;
+    try {
+      const updated = await supplierMessageModel.markRead(request, threadId);
+      setAccountSupplierMessages((current) => current.map((item) => (
+        (item._id || item.id) === threadId ? updated : item
+      )));
+    } catch {
+      // La lectura no debe bloquear la selección del mensaje.
+    }
+  }
+
+  async function replySupplierMessage(event) {
+    event.preventDefault();
+    if (!selectedSupplierMessageId || supplierMessageReplyForm.message.trim().length < 3) {
+      setNotice('Escribe una respuesta de al menos 3 caracteres.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const updated = await supplierMessageModel.reply(request, selectedSupplierMessageId, supplierMessageReplyForm.message);
+      setSupplierMessageReplyForm({ ...initialMessageReplyForm });
+      setSupplierMessages((current) => current.map((item) => (
+        (item._id || item.id) === selectedSupplierMessageId ? updated : item
+      )));
+      setNotice('Respuesta enviada al cliente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function replyAccountSupplierMessage(event) {
+    event.preventDefault();
+    if (!selectedAccountMessageId || accountMessageReplyForm.message.trim().length < 3) {
+      setNotice('Escribe una respuesta de al menos 3 caracteres.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const updated = await supplierMessageModel.reply(request, selectedAccountMessageId, accountMessageReplyForm.message);
+      setAccountMessageReplyForm({ ...initialMessageReplyForm });
+      setAccountSupplierMessages((current) => current.map((item) => (
+        (item._id || item.id) === selectedAccountMessageId ? updated : item
+      )));
+      setNotice('Mensaje enviado al proveedor.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submitProductReview(event) {
     event.preventDefault();
@@ -721,6 +1096,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   async function deleteReview(review) {
     const reviewId = review?._id || review?.id;
     if (!reviewId) return;
+    if (!window.confirm('¿Eliminar esta opinión?')) return;
 
     setBusy(true);
     try {
@@ -754,6 +1130,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
     setCheckoutErrors({});
     setCheckoutStep('shipping');
+    trackBeginCheckout(cartItems, cartTotal);
   }
 
   function goToCartItems() {
@@ -792,12 +1169,16 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
     setBusy(true);
     try {
-      await orderModel.createFromCart(request, session.user.email, cartItems, shippingForm);
+      const currentItems = [...cartItems];
+      const currentTotal = cartTotal;
+      const order = await orderModel.createFromCart(request, session.user.email, currentItems, shippingForm, paymentForm.method);
+      trackPurchase(order, currentItems, currentTotal);
       setCart(await cartModel.clear(request));
       await loadOrders();
       await loadProducts();
       setCheckoutStep('items');
       setCheckoutErrors({});
+      setCartFeedback(null);
       setPaymentForm({ ...initialPaymentForm });
       setView('orders');
       setNotice('Pedido creado correctamente.');
@@ -1026,7 +1407,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
           title: '',
           body: '',
           imageUrl: '',
+          mobileImageUrl: '',
+          altText: '',
           linkUrl: '',
+          ctaLabel: '',
+          trackingId: '',
+          campaignName: '',
           ...(items[itemIndex] || {}),
           [field]: value,
         };
@@ -1079,6 +1465,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   };
 
   const deleteHomeSection = (sectionId) => {
+    if (!window.confirm('¿Eliminar este componente de la portada?')) return;
     saveHomeContent((current) => ({
       ...current,
       sections: current.sections
@@ -1113,21 +1500,33 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         title: homeComponentForm.itemOneTitle.trim(),
         body: homeComponentForm.itemOneBody.trim(),
         imageUrl: homeComponentForm.itemOneImageUrl.trim(),
+        mobileImageUrl: homeComponentForm.itemOneMobileImageUrl.trim(),
+        altText: homeComponentForm.itemOneAltText.trim(),
         linkUrl: homeComponentForm.itemOneLinkUrl.trim(),
+        trackingId: homeComponentForm.itemOneTrackingId.trim(),
+        campaignName: homeComponentForm.itemOneCampaignName.trim(),
       },
       {
         title: homeComponentForm.itemTwoTitle.trim(),
         body: homeComponentForm.itemTwoBody.trim(),
         imageUrl: homeComponentForm.itemTwoImageUrl.trim(),
+        mobileImageUrl: homeComponentForm.itemTwoMobileImageUrl.trim(),
+        altText: homeComponentForm.itemTwoAltText.trim(),
         linkUrl: homeComponentForm.itemTwoLinkUrl.trim(),
+        trackingId: homeComponentForm.itemTwoTrackingId.trim(),
+        campaignName: homeComponentForm.itemTwoCampaignName.trim(),
       },
       {
         title: homeComponentForm.itemThreeTitle.trim(),
         body: homeComponentForm.itemThreeBody.trim(),
         imageUrl: homeComponentForm.itemThreeImageUrl.trim(),
+        mobileImageUrl: homeComponentForm.itemThreeMobileImageUrl.trim(),
+        altText: homeComponentForm.itemThreeAltText.trim(),
         linkUrl: homeComponentForm.itemThreeLinkUrl.trim(),
+        trackingId: homeComponentForm.itemThreeTrackingId.trim(),
+        campaignName: homeComponentForm.itemThreeCampaignName.trim(),
       },
-    ].filter((item) => item.title || item.body || item.imageUrl || item.linkUrl);
+    ].filter((item) => item.title || item.body || item.imageUrl || item.mobileImageUrl || item.linkUrl);
 
     saveHomeContent((current) => ({
       ...current,
@@ -1141,8 +1540,16 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
           body: homeComponentForm.body.trim(),
           ctaLabel: homeComponentForm.ctaLabel.trim(),
           imageUrl: homeComponentForm.imageUrl.trim(),
+          mobileImageUrl: homeComponentForm.mobileImageUrl.trim(),
+          altText: homeComponentForm.altText.trim(),
           items: bannerItems,
           linkUrl: homeComponentForm.linkUrl.trim(),
+          status: homeComponentForm.status || 'published',
+          startDate: homeComponentForm.startDate || '',
+          endDate: homeComponentForm.endDate || '',
+          priority: Number(homeComponentForm.priority || 0),
+          trackingId: homeComponentForm.trackingId.trim(),
+          campaignName: homeComponentForm.campaignName.trim(),
           productIds: homeComponentForm.productIds,
           enabled: true,
           locked: false,
@@ -1165,7 +1572,27 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setBusy(true);
     try {
       setHomeContent(await homeContentModel.saveRemote(request, homeContent));
+      const result = await adminModel.listHomeContentRevisions(request);
+      setHomeContentRevisions(Array.isArray(result?.revisions) ? result.revisions : []);
       setNotice('Portada guardada en Atlas.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restoreHomeContentRevision(revisionId) {
+    if (session?.user?.role !== 'admin' || !revisionId) return;
+    if (!window.confirm('¿Restaurar esta versión de la portada? Se guardará una copia del estado actual.')) return;
+    setBusy(true);
+    try {
+      const restored = await adminModel.restoreHomeContentRevision(request, revisionId);
+      const normalized = homeContentModel.save(restored);
+      setHomeContent(normalized);
+      const result = await adminModel.listHomeContentRevisions(request);
+      setHomeContentRevisions(Array.isArray(result?.revisions) ? result.revisions : []);
+      setNotice('Versión de portada restaurada.');
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -1281,6 +1708,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setNotice('No puedes eliminar tu propio usuario administrador desde aquí.');
       return;
     }
+    if (!window.confirm('¿Eliminar este cliente? Esta acción no se puede deshacer desde el panel.')) return;
 
     setBusy(true);
     try {
@@ -1322,6 +1750,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   async function deleteCategory(category) {
     const categoryId = category?._id || category?.id;
     if (!categoryId) return;
+    if (!window.confirm('¿Eliminar esta categoría?')) return;
 
     setBusy(true);
     try {
@@ -1359,6 +1788,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   async function deleteProduct(product) {
     const productId = product?._id || product?.id;
     if (!productId) return;
+    if (!window.confirm('¿Eliminar este producto del catálogo?')) return;
 
     setBusy(true);
     try {
@@ -1368,6 +1798,50 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       await loadFeaturedProducts();
       await loadAdminProducts();
       setNotice('Producto eliminado correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveAdminProduct(product) {
+    const productId = product?._id || product?.id;
+    if (!productId || session?.user?.role !== 'admin') return;
+
+    setBusy(true);
+    try {
+      await adminModel.approveProduct(request, productId);
+      await loadProducts();
+      await loadFeaturedProducts();
+      await loadAdminProducts();
+      await loadAdminSuppliers();
+      setNotice('Producto aprobado y publicado correctamente.');
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rejectAdminProduct(product) {
+    const productId = product?._id || product?.id;
+    if (!productId || session?.user?.role !== 'admin') return;
+    const reason = window.prompt('Indica el motivo del rechazo para que el proveedor pueda corregirlo:');
+    if (reason == null) return;
+    if (reason.trim().length < 3) {
+      setNotice('Indica un motivo claro para rechazar el producto.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await adminModel.rejectProduct(request, productId, reason.trim());
+      await loadProducts();
+      await loadFeaturedProducts();
+      await loadAdminProducts();
+      await loadAdminSuppliers();
+      setNotice('Producto rechazado. El proveedor verá el motivo para corregirlo.');
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -1393,6 +1867,35 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       await loadProducts();
       await loadFeaturedProducts();
       await loadAdminProducts();
+      setNotice('Imágenes subidas correctamente.');
+    } catch (error) {
+      setNotice(error.message === 'Internal server error'
+        ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
+        : error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadSupplierProductImages(event) {
+    event.preventDefault();
+    const productId = selectedSupplierProductId || imageForm.productId;
+    if (!productId || imageForm.files.length === 0) {
+      setNotice('Elige un producto propio y al menos una imagen.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const updated = await supplierModel.uploadProductImages(request, productId, imageForm.files);
+      setImageForm({ ...initialImageForm, productId });
+      setProductForm((current) => ({
+        ...current,
+        images: Array.isArray(updated?.images) ? updated.images : current.images,
+      }));
+      await loadSupplierPanel();
+      await loadProducts();
+      await loadFeaturedProducts();
       setNotice('Imágenes subidas correctamente.');
     } catch (error) {
       setNotice(error.message === 'Internal server error'
@@ -1429,6 +1932,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   async function deleteOrder(order) {
     const orderId = order._id || order.id;
     if (!orderId || session?.user?.role !== 'admin') return;
+    if (!window.confirm('¿Eliminar este pedido? Se repondrá el stock asociado.')) return;
 
     setBusy(true);
     try {
@@ -1450,13 +1954,17 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       adminProducts,
       adminSearch,
       adminReviews,
+      accountMessageReplyForm,
       accountReviewForm,
+      accountProfileForm,
+      accountSupplierMessages,
       adminUserForm,
       adminUsers,
       authForm,
       authMode,
       busy,
       cartCount,
+      cartFeedback,
       cartItems,
       cartTotal,
       categories,
@@ -1468,6 +1976,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       featuredProducts,
       homeComponentForm,
       homeContent,
+      homeContentRevisions,
       imageForm,
       loadingProductDetail,
       loadingProducts,
@@ -1478,8 +1987,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       pagination,
       paymentForm,
       productForm,
+      productContactFeedback,
+      productContactForm,
       productReviews,
       products,
+      relatedProducts,
       reviewForm,
       reservedBySku,
       selectedProduct,
@@ -1491,6 +2003,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       selectedAdminUserId,
       selectedAdminUserOrders,
       selectedAccountReviewId,
+      selectedAccountMessageId,
       session,
       shippingForm,
       view: routeView,
@@ -1501,6 +2014,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       createCategory,
       createProduct,
       createOrder,
+      approveAdminProduct,
+      rejectAdminProduct,
+      cancelOrder,
       deleteAdminUser,
       deleteCategory,
       deleteProduct,
@@ -1514,11 +2030,16 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       openAdminOrder,
       openAdminUserOrders,
       removeCartItem,
+      replyAccountSupplierMessage,
+      replySupplierMessage,
+      dismissCartFeedback: () => setCartFeedback(null),
       resetFilters,
       resetCategoryForm,
       resetProductForm,
       saveAdminUser,
       saveAccountReview,
+      saveAccountProfile,
+      saveSupplierProfile,
       selectAdminCategory,
       selectAdminProduct,
       selectAccountReview,
@@ -1536,6 +2057,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       updateAuthForm,
       updateAdminUserForm,
       updateAccountReviewForm,
+      updateAccountMessageReplyForm,
+      updateAccountProfileForm,
       updateCartItem,
       updateCategoryForm,
       updateHomeComponentForm,
@@ -1559,10 +2082,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       deleteHomeSection,
       createHomeComponent,
       resetHomeContent,
+      restoreHomeContentRevision,
       saveHomeContentSettings,
       saveImageUrl,
       submitProductReview,
+      sendProductContactMessage,
       uploadProductImages,
+      uploadSupplierProductImages,
       deleteOrder,
     },
   };

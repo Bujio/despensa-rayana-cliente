@@ -14,24 +14,23 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
   const supplierName = product?.supplier?.name || 'La Despensa Rayana';
   const cardDescription = product?.shortDescription || product?.description || 'Producto de origen rayano pendiente de completar.';
 
-  const openProduct = (event) => {
-    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
+  const openProduct = () => {
     onOpen?.(product);
   };
 
   return (
     <article
       className="product-card ecommerce-card"
-      onClick={openProduct}
-      onKeyDown={openProduct}
-      role="link"
-      tabIndex={0}
-      aria-label={'Ver producto ' + product.name}
     >
+      <button
+        className="product-card-open-hitbox"
+        type="button"
+        onClick={openProduct}
+        aria-label={'Ver producto ' + productName}
+      />
       <div className="product-media">
         {image && !imageFailed ? (
-          <img src={image} alt={product.name} loading="lazy" onError={() => setImageFailed(true)} />
+          <img src={image} alt={productName} loading="lazy" onError={() => setImageFailed(true)} />
         ) : (
           <PackageSearch size={44} />
         )}
@@ -40,7 +39,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
           className={'favorite-button' + (isFavorite ? ' active' : '')}
           type="button"
           title={isFavorite ? 'Quitar favorito' : 'Guardar favorito'}
-          aria-label={(isFavorite ? 'Quitar ' : 'Guardar ') + product.name + ' como favorito'}
+          aria-label={(isFavorite ? 'Quitar ' : 'Guardar ') + productName + ' como favorito'}
           onClick={(event) => {
             event.stopPropagation();
             onToggleFavorite?.(product);
@@ -73,7 +72,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
             className="quick-add-button"
             type="button"
             title={availableStock > 0 ? 'Añadir a la cesta' : 'Agotado'}
-            aria-label={availableStock > 0 ? 'Añadir ' + product.name + ' a la cesta' : product.name + ' agotado'}
+            aria-label={availableStock > 0 ? 'Añadir ' + productName + ' a la cesta' : productName + ' agotado'}
             onClick={(event) => {
               event.stopPropagation();
               onAdd?.(product);
