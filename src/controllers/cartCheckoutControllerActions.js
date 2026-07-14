@@ -4,7 +4,7 @@ import { productModel } from '../models/productModel.js';
 import { initialPaymentForm } from './controllerInitialState.js';
 import {
   formatNoticeProductName,
-  validateCheckoutConfirmation,
+  validatePaymentForm,
   validateShippingForm,
 } from './controllerHelpers.js';
 
@@ -136,17 +136,17 @@ export function createCartCheckoutControllerActions({
     event?.preventDefault();
     if (!cartItems.length || !session?.user?.email) return;
     const shippingErrors = validateShippingForm(shippingForm);
-    const confirmationErrors = validateCheckoutConfirmation(paymentForm);
+    const paymentErrors = validatePaymentForm(paymentForm);
     if (Object.keys(shippingErrors).length) {
       setCheckoutErrors(shippingErrors);
       setCheckoutStep('shipping');
       setNotice('Revisa la dirección de envío.');
       return;
     }
-    if (Object.keys(confirmationErrors).length) {
-      setCheckoutErrors(confirmationErrors);
+    if (Object.keys(paymentErrors).length) {
+      setCheckoutErrors(paymentErrors);
       setCheckoutStep('payment');
-      setNotice('Acepta las condiciones de la beta para registrar el pedido.');
+      setNotice('Revisa los datos de pago.');
       return;
     }
     setBusy(true);
@@ -159,7 +159,7 @@ export function createCartCheckoutControllerActions({
       setCheckoutErrors({});
       setPaymentForm({ ...initialPaymentForm });
       setView('orders');
-      setNotice('Pedido registrado. Permanece pendiente y el pago real todavía no está integrado.');
+      setNotice('Pedido creado correctamente.');
     } catch (error) {
       setNotice(error.message);
     } finally {

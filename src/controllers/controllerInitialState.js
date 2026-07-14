@@ -113,5 +113,8 @@ export const initialAccountProfileForm = {
 };
 
 export const initialPaymentForm = {
-  accepted: false,
+  holder: '',
+  cardNumber: '',
+  expiry: '',
+  cvc: '',
 };

@@ -134,11 +134,35 @@ const getFirstErrorField = (errors, fields) => fields.find((field) => errors[fie
 
 const getCheckoutSubmitError = (error) => {
   const rawMessage = String(error?.message || '').trim();
-  const detail = /failed to fetch|networkerror/i.test(rawMessage)
-    ? 'No se pudo conectar con el servidor.'
-    : rawMessage || 'La API no pudo completar la operación.';
+  const normalizedMessage = rawMessage.toLowerCase();
+  const preservedDraft = ' El carrito y los datos de entrega se conservan.';
 
-  return detail + ' El carrito y los datos de entrega se conservan para que puedas intentarlo de nuevo.';
+  if (error?.code === 'INVALID_ORDER_CONFIRMATION') {
+    return 'El servidor no confirmó correctamente el pedido. Comprueba «Pedidos» antes de volver a intentarlo para evitar duplicados.' + preservedDraft;
+  }
+  if (error?.code === 'INVALID_CHECKOUT_CART') {
+    return 'El carrito contiene un producto sin una referencia o cantidad válida. Revísalo antes de registrar el pedido.' + preservedDraft;
+  }
+  if (/failed to fetch|networkerror/.test(normalizedMessage)) {
+    return 'Se perdió la conexión y no podemos confirmar si el pedido llegó a registrarse. Comprueba «Pedidos» antes de volver a intentarlo.' + preservedDraft;
+  }
+  if (normalizedMessage.includes('insufficient stock')) {
+    return 'No hay stock suficiente para uno de los productos. Revisa las cantidades del carrito.' + preservedDraft;
+  }
+  if (normalizedMessage.includes('not found') || normalizedMessage.includes('not available')) {
+    return 'Uno de los productos ya no está disponible. Revisa el carrito antes de continuar.' + preservedDraft;
+  }
+  if (normalizedMessage.includes('no token') || normalizedMessage.includes('invalid token') || normalizedMessage.includes('unauthorized')) {
+    return 'La sesión ha caducado. Inicia sesión de nuevo para continuar.' + preservedDraft;
+  }
+  if (normalizedMessage.includes('forbidden')) {
+    return 'No tienes permiso para registrar este pedido con la cuenta actual.' + preservedDraft;
+  }
+  if (normalizedMessage.includes('too many')) {
+    return 'Se han realizado demasiados intentos. Espera unos minutos antes de volver a probar.' + preservedDraft;
+  }
+
+  return 'El servidor no pudo confirmar el registro del pedido. Inténtalo de nuevo más tarde.' + preservedDraft;
 };
 
 const formatDateInput = (value) => {
@@ -262,6 +286,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [checkoutFocusTarget, setCheckoutFocusTarget] = useState(null);
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const checkoutSubmittingRef = useRef(false);
+  const preserveCheckoutDraftRef = useRef(false);
+  const skipCheckoutSessionReloadRef = useRef(false);
 
   const cartItems = cart?.items || [];
   const cartTotal = useMemo(
@@ -306,6 +332,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   };
 
   const applySession = (nextSession) => {
+    if (checkoutSubmittingRef.current) {
+      preserveCheckoutDraftRef.current = true;
+      skipCheckoutSessionReloadRef.current = true;
+    }
     setSession(nextSession);
     if (nextSession) sessionModel.save(nextSession);
     else sessionModel.clear();
@@ -357,17 +387,25 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   useEffect(() => {
     if (session) {
-      setShippingForm(getShippingDefaults(session));
-      loadCart();
-      loadOrders();
-      loadMyReviews();
-      if (session.user?.role === 'admin') {
-        loadAdminProducts();
-        loadAdminUsers();
-        loadAdminReviews();
+      const preserveCheckoutDraft = checkoutSubmittingRef.current || preserveCheckoutDraftRef.current;
+      const skipCheckoutSessionReload = skipCheckoutSessionReloadRef.current;
+      if (!preserveCheckoutDraft) setShippingForm(getShippingDefaults(session));
+      preserveCheckoutDraftRef.current = false;
+      skipCheckoutSessionReloadRef.current = false;
+      if (!skipCheckoutSessionReload) {
+        loadCart();
+        loadOrders();
+        loadMyReviews();
+        if (session.user?.role === 'admin') {
+          loadAdminProducts();
+          loadAdminUsers();
+          loadAdminReviews();
+        }
       }
     } else {
-      setCart(null);
+      const preserveCheckoutDraft = checkoutSubmittingRef.current || preserveCheckoutDraftRef.current;
+      skipCheckoutSessionReloadRef.current = false;
+      if (!preserveCheckoutDraft) setCart(null);
       setOrders([]);
       setMyReviews([]);
       setAdminReviews([]);
@@ -383,13 +421,15 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setSelectedAdminCategoryId('');
       setAdminTab('users');
       setAdminSearchState({ ...initialAdminSearch });
-      setCheckoutStep('items');
-      setShippingForm(getShippingDefaults(null));
-      setPaymentForm({ ...initialPaymentForm });
-      setCheckoutErrors({});
-      setCheckoutFocusTarget(null);
-      setCheckoutSubmitting(false);
-      checkoutSubmittingRef.current = false;
+      if (!preserveCheckoutDraft) {
+        setCheckoutStep('items');
+        setShippingForm(getShippingDefaults(null));
+        setPaymentForm({ ...initialPaymentForm });
+        setCheckoutErrors({});
+        setCheckoutFocusTarget(null);
+        setCheckoutSubmitting(false);
+        checkoutSubmittingRef.current = false;
+      }
     }
   }, [session?.accessToken]);
 
@@ -401,7 +441,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
-  async function loadProducts() {
+  async function loadProducts({ reportError = true } = {}) {
     setLoadingProducts(true);
     try {
       const needsLocalFiltering = hasClientSideFilters(filters);
@@ -422,7 +462,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setProducts(filteredProducts);
       setPagination(needsLocalFiltering ? { page: 1, totalPages: 1 } : result.pagination);
     } catch (error) {
-      setNotice(error.message);
+      if (reportError) setNotice(error.message);
     } finally {
       setLoadingProducts(false);
     }
@@ -829,7 +869,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
           ...current.filter((order) => (order?._id || order?.id) !== createdId),
         ];
       });
-      await loadProducts();
+      void loadProducts({ reportError: false });
       setCheckoutStep('items');
       setCheckoutErrors({});
       setPaymentForm({ ...initialPaymentForm });
@@ -838,7 +878,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     } catch (error) {
       setCheckoutErrors({ submit: getCheckoutSubmitError(error) });
       setCheckoutFocusTarget({ field: 'submit' });
-      setNotice('No se pudo registrar el pedido. Revisa el error mostrado en el checkout.');
+      setNotice('No se pudo confirmar el pedido. Revisa el error mostrado en el checkout.');
     } finally {
       checkoutSubmittingRef.current = false;
       setCheckoutSubmitting(false);

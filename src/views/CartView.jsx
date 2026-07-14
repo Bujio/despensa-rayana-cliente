@@ -175,7 +175,7 @@ export function CartView({ state, actions }) {
             </div>
             {checkoutErrors.submit && (
               <div className="checkout-feedback error" id="checkout-submit" role="alert" tabIndex={-1}>
-                <strong>No se ha registrado el pedido</strong>
+                <strong>No se pudo confirmar el pedido</strong>
                 <span>{checkoutErrors.submit}</span>
               </div>
             )}

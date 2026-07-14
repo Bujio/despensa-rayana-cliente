@@ -70,11 +70,16 @@ export const validateShippingForm = (form) => {
   return errors;
 };
 
-export const validateCheckoutConfirmation = (form) => {
+export const validatePaymentForm = (form) => {
   const errors = {};
-  if (!form.accepted) {
-    errors.accepted = 'Debes aceptar las condiciones de esta beta para registrar el pedido.';
-  }
+  const cardNumber = form.cardNumber.replace(/\s/g, '');
+  const cvc = form.cvc.trim();
+  const expiry = form.expiry.trim();
+
+  if (form.holder.trim().length < 3) errors.holder = 'Indica el titular de la tarjeta.';
+  if (!/^\d{13,19}$/.test(cardNumber)) errors.cardNumber = 'La tarjeta debe tener entre 13 y 19 números.';
+  if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry)) errors.expiry = 'Usa el formato MM/AA.';
+  if (!/^\d{3,4}$/.test(cvc)) errors.cvc = 'El CVC debe tener 3 o 4 números.';
   return errors;
 };
 
