@@ -578,6 +578,71 @@ input:focus, select:focus { border-color: #315c45; box-shadow: 0 0 0 3px rgba(49
   font-weight: 800;
 }
 
+.checkout-beta-notice,
+.checkout-feedback {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.checkout-beta-notice > p,
+.checkout-feedback > span,
+.checkout-operation-status {
+  margin: 0;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.checkout-beta-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.checkout-beta-facts div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.checkout-beta-facts dt,
+.checkout-beta-facts dd {
+  margin: 0;
+}
+
+.checkout-beta-facts dd {
+  color: var(--color-forest-dark);
+  font-weight: 800;
+  text-align: right;
+}
+
+.payment-acceptance {
+  align-items: flex-start;
+}
+
+.payment-acceptance input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.checkout-feedback.error {
+  border-color: rgba(159, 44, 31, 0.32);
+  background: #fff4f1;
+  color: #7d241b;
+}
+
+.checkout-feedback.error > span {
+  color: #7d241b;
+}
+
+.checkout-operation-status {
+  font-weight: 800;
+}
+
 .product-detail {
   max-width: 1180px;
   margin: 0 auto;

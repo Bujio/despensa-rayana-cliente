@@ -19,13 +19,13 @@ export const orderModel = {
     const result = await request('/orders/client/' + encodeURIComponent(email));
     return getList(result);
   },
-  createFromCart(request, email, items, shippingAddress, paymentMethod = 'external_pending') {
+  createFromCart(request, email, items, shippingAddress) {
     return request('/orders', {
       method: 'POST',
       body: JSON.stringify({
         email,
         shippingAddress,
-        paymentMethod,
+        paymentMethod: 'external_pending',
         products: cartItemsToOrderProducts(items),
       }),
     });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiRequest } from '../models/apiClient.js';
 import { adminModel } from '../models/adminModel.js';
 import { authModel } from '../models/authModel.js';
@@ -101,10 +101,7 @@ const initialAdminUserForm = {
 };
 
 const initialPaymentForm = {
-  holder: '',
-  cardNumber: '',
-  expiry: '',
-  cvc: '',
+  accepted: false,
 };
 
 const getShippingDefaults = (session) => ({
@@ -125,17 +122,23 @@ const validateShippingForm = (form) => {
   return errors;
 };
 
-const validatePaymentForm = (form) => {
+const validateCheckoutConfirmation = (form) => {
   const errors = {};
-  const cardNumber = form.cardNumber.replace(/\s/g, '');
-  const cvc = form.cvc.trim();
-  const expiry = form.expiry.trim();
-
-  if (form.holder.trim().length < 3) errors.holder = 'Indica el titular de la tarjeta.';
-  if (!/^\d{13,19}$/.test(cardNumber)) errors.cardNumber = 'La tarjeta debe tener entre 13 y 19 números.';
-  if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry)) errors.expiry = 'Usa el formato MM/AA.';
-  if (!/^\d{3,4}$/.test(cvc)) errors.cvc = 'El CVC debe tener 3 o 4 números.';
+  if (!form.accepted) {
+    errors.accepted = 'Debes aceptar las condiciones de esta beta para registrar el pedido.';
+  }
   return errors;
+};
+
+const getFirstErrorField = (errors, fields) => fields.find((field) => errors[field]);
+
+const getCheckoutSubmitError = (error) => {
+  const rawMessage = String(error?.message || '').trim();
+  const detail = /failed to fetch|networkerror/i.test(rawMessage)
+    ? 'No se pudo conectar con el servidor.'
+    : rawMessage || 'La API no pudo completar la operación.';
+
+  return detail + ' El carrito y los datos de entrega se conservan para que puedas intentarlo de nuevo.';
 };
 
 const formatDateInput = (value) => {
@@ -256,6 +259,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [shippingForm, setShippingForm] = useState(() => getShippingDefaults(session));
   const [paymentForm, setPaymentForm] = useState(() => ({ ...initialPaymentForm }));
   const [checkoutErrors, setCheckoutErrors] = useState({});
+  const [checkoutFocusTarget, setCheckoutFocusTarget] = useState(null);
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
+  const checkoutSubmittingRef = useRef(false);
 
   const cartItems = cart?.items || [];
   const cartTotal = useMemo(
@@ -381,6 +387,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setShippingForm(getShippingDefaults(null));
       setPaymentForm({ ...initialPaymentForm });
       setCheckoutErrors({});
+      setCheckoutFocusTarget(null);
+      setCheckoutSubmitting(false);
+      checkoutSubmittingRef.current = false;
     }
   }, [session?.accessToken]);
 
@@ -766,45 +775,73 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     const errors = validateShippingForm(shippingForm);
     if (Object.keys(errors).length) {
       setCheckoutErrors(errors);
+      setCheckoutFocusTarget({
+        field: getFirstErrorField(errors, ['street', 'codePostal', 'city', 'country', 'phone']),
+      });
       setNotice('Revisa la dirección de envío.');
       return;
     }
     setCheckoutErrors({});
+    setCheckoutFocusTarget(null);
     setCheckoutStep('payment');
   }
 
   async function createOrder(event) {
     event?.preventDefault();
-    if (!cartItems.length || !session?.user?.email) return;
+    if (checkoutSubmittingRef.current || !cartItems.length || !session?.user?.email) return;
     const shippingErrors = validateShippingForm(shippingForm);
-    const paymentErrors = validatePaymentForm(paymentForm);
+    const confirmationErrors = validateCheckoutConfirmation(paymentForm);
     if (Object.keys(shippingErrors).length) {
       setCheckoutErrors(shippingErrors);
       setCheckoutStep('shipping');
+      setCheckoutFocusTarget({
+        field: getFirstErrorField(shippingErrors, ['street', 'codePostal', 'city', 'country', 'phone']),
+      });
       setNotice('Revisa la dirección de envío.');
       return;
     }
-    if (Object.keys(paymentErrors).length) {
-      setCheckoutErrors(paymentErrors);
+    if (Object.keys(confirmationErrors).length) {
+      setCheckoutErrors(confirmationErrors);
       setCheckoutStep('payment');
-      setNotice('Revisa los datos de pago.');
+      setCheckoutFocusTarget({
+        field: getFirstErrorField(confirmationErrors, ['accepted']),
+      });
+      setNotice('Acepta las condiciones de la beta para registrar el pedido.');
       return;
     }
-    setBusy(true);
+
+    checkoutSubmittingRef.current = true;
+    setCheckoutSubmitting(true);
+    setCheckoutErrors({});
+    setCheckoutFocusTarget(null);
     try {
-      await orderModel.createFromCart(request, session.user.email, cartItems, shippingForm);
-      setCart(await cartModel.clear(request));
-      await loadOrders();
+      const createdOrder = await orderModel.createFromCart(
+        request,
+        session.user.email,
+        cartItems,
+        shippingForm,
+      );
+      setCart((current) => ({ ...(current || {}), items: [] }));
+      setOrders((current) => {
+        const createdId = createdOrder?._id || createdOrder?.id;
+        return [
+          createdOrder,
+          ...current.filter((order) => (order?._id || order?.id) !== createdId),
+        ];
+      });
       await loadProducts();
       setCheckoutStep('items');
       setCheckoutErrors({});
       setPaymentForm({ ...initialPaymentForm });
       setView('orders');
-      setNotice('Pedido creado correctamente.');
+      setNotice('Pedido registrado. Permanece pendiente y el pago real todavía no está integrado.');
     } catch (error) {
-      setNotice(error.message);
+      setCheckoutErrors({ submit: getCheckoutSubmitError(error) });
+      setCheckoutFocusTarget({ field: 'submit' });
+      setNotice('No se pudo registrar el pedido. Revisa el error mostrado en el checkout.');
     } finally {
-      setBusy(false);
+      checkoutSubmittingRef.current = false;
+      setCheckoutSubmitting(false);
     }
   }
 
@@ -1462,6 +1499,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       categories,
       categoryForm,
       checkoutErrors,
+      checkoutFocusTarget,
+      checkoutSubmitting,
       checkoutStep,
       filters,
       favoriteIds,

@@ -1,16 +1,17 @@
-import { CreditCard, MapPin, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
+import { useEffect } from 'react';
+import { MapPin, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { formatCurrency, formatProductName } from './viewFormatters.js';
 
-function FieldError({ message }) {
+function FieldError({ field, message }) {
   if (!message) return null;
-  return <span className="field-error">{message}</span>;
+  return <span className="field-error" id={'checkout-' + field + '-error'}>{message}</span>;
 }
 
 function CheckoutSteps({ current }) {
   const steps = [
     ['items', 'Productos'],
     ['shipping', 'Envío'],
-    ['payment', 'Pago'],
+    ['payment', 'Confirmación'],
   ];
 
   return (
@@ -27,16 +28,26 @@ function CheckoutSteps({ current }) {
 
 export function CartView({ state, actions }) {
   const {
-    busy,
     cartCount,
     cartItems,
     cartTotal,
     checkoutErrors,
+    checkoutFocusTarget,
+    checkoutSubmitting,
     checkoutStep,
     paymentForm,
     session,
     shippingForm,
   } = state;
+
+  useEffect(() => {
+    if (!checkoutFocusTarget?.field || typeof document === 'undefined') return;
+    document.getElementById('checkout-' + checkoutFocusTarget.field)?.focus();
+  }, [checkoutFocusTarget]);
+
+  const getErrorDescription = (field) => (
+    checkoutErrors[field] ? 'checkout-' + field + '-error' : undefined
+  );
 
   return (
     <section className="cart-drawer-view" aria-label="Cesta">
@@ -92,79 +103,93 @@ export function CartView({ state, actions }) {
         {checkoutStep === 'shipping' && (
           <form className="checkout-form" onSubmit={actions.goToPayment} noValidate>
             <div className="form-section-title"><MapPin size={18} /> Dirección de envío</div>
-            <label>
+            <label htmlFor="checkout-street">
               Calle
-              <input value={shippingForm.street} onChange={(event) => actions.updateShippingForm('street', event.target.value)} autoComplete="street-address" />
-              <FieldError message={checkoutErrors.street} />
+              <input id="checkout-street" name="street" value={shippingForm.street} onChange={(event) => actions.updateShippingForm('street', event.target.value)} autoComplete="street-address" aria-invalid={Boolean(checkoutErrors.street)} aria-describedby={getErrorDescription('street')} />
+              <FieldError field="street" message={checkoutErrors.street} />
             </label>
             <div className="checkout-grid">
-              <label>
+              <label htmlFor="checkout-codePostal">
                 Código postal
-                <input value={shippingForm.codePostal} onChange={(event) => actions.updateShippingForm('codePostal', event.target.value)} inputMode="numeric" autoComplete="postal-code" />
-                <FieldError message={checkoutErrors.codePostal} />
+                <input id="checkout-codePostal" name="codePostal" value={shippingForm.codePostal} onChange={(event) => actions.updateShippingForm('codePostal', event.target.value)} inputMode="numeric" autoComplete="postal-code" aria-invalid={Boolean(checkoutErrors.codePostal)} aria-describedby={getErrorDescription('codePostal')} />
+                <FieldError field="codePostal" message={checkoutErrors.codePostal} />
               </label>
-              <label>
+              <label htmlFor="checkout-city">
                 Ciudad
-                <input value={shippingForm.city} onChange={(event) => actions.updateShippingForm('city', event.target.value)} autoComplete="address-level2" />
-                <FieldError message={checkoutErrors.city} />
+                <input id="checkout-city" name="city" value={shippingForm.city} onChange={(event) => actions.updateShippingForm('city', event.target.value)} autoComplete="address-level2" aria-invalid={Boolean(checkoutErrors.city)} aria-describedby={getErrorDescription('city')} />
+                <FieldError field="city" message={checkoutErrors.city} />
               </label>
             </div>
             <div className="checkout-grid">
-              <label>
+              <label htmlFor="checkout-country">
                 País
-                <input value={shippingForm.country} onChange={(event) => actions.updateShippingForm('country', event.target.value)} autoComplete="country-name" />
-                <FieldError message={checkoutErrors.country} />
+                <input id="checkout-country" name="country" value={shippingForm.country} onChange={(event) => actions.updateShippingForm('country', event.target.value)} autoComplete="country-name" aria-invalid={Boolean(checkoutErrors.country)} aria-describedby={getErrorDescription('country')} />
+                <FieldError field="country" message={checkoutErrors.country} />
               </label>
-              <label>
+              <label htmlFor="checkout-phone">
                 Teléfono
-                <input value={shippingForm.phone} onChange={(event) => actions.updateShippingForm('phone', event.target.value)} inputMode="tel" autoComplete="tel" />
-                <FieldError message={checkoutErrors.phone} />
+                <input id="checkout-phone" name="phone" value={shippingForm.phone} onChange={(event) => actions.updateShippingForm('phone', event.target.value)} inputMode="tel" autoComplete="tel" aria-invalid={Boolean(checkoutErrors.phone)} aria-describedby={getErrorDescription('phone')} />
+                <FieldError field="phone" message={checkoutErrors.phone} />
               </label>
             </div>
             <div className="checkout-actions">
               <button className="secondary" type="button" onClick={actions.goToCartItems}>
                 Volver
               </button>
-              <button className="primary" type="submit" disabled={busy}>
-                Continuar al pago
+              <button className="primary" type="submit">
+                Continuar a confirmación
               </button>
             </div>
           </form>
         )}
 
         {checkoutStep === 'payment' && (
-          <form className="checkout-form" onSubmit={actions.createOrder} noValidate>
-            <div className="form-section-title"><CreditCard size={18} /> Pago</div>
-            <div className="safe-payment-panel">
-              <strong>Pago seguro externo</strong>
-              <p>
-                La Despensa Rayana no solicita ni almacena datos de tarjeta. En producción,
-                este paso debe conectarse con una pasarela segura como Stripe, Redsys o PayPal.
+          <form className="checkout-form" onSubmit={actions.createOrder} noValidate aria-busy={checkoutSubmitting}>
+            <div className="form-section-title"><ShoppingBag size={18} /> Confirmar pedido pendiente</div>
+            <div className="checkout-beta-notice" role="note">
+              <strong>Beta sin cobro real</strong>
+              <p id="checkout-beta-description">
+                Registraremos el pedido como pendiente. No se realizará ningún cargo y el pago real todavía no está integrado.
+                No solicitamos ni almacenamos datos de tarjeta.
               </p>
-              <label>
-                Método de pago
-                <select value={paymentForm.method} onChange={(event) => actions.updatePaymentForm('method', event.target.value)}>
-                  <option value="external_pending">Pasarela segura pendiente de integración</option>
-                  <option value="manual_transfer">Transferencia bancaria manual</option>
-                </select>
-                <FieldError message={checkoutErrors.method} />
-              </label>
-              <label className="check-row payment-acceptance">
+              <dl className="checkout-beta-facts">
+                <div><dt>Estado inicial</dt><dd>Pendiente</dd></div>
+                <div><dt>Método provisional</dt><dd>Registro externo pendiente</dd></div>
+              </dl>
+              <label className="check-row payment-acceptance" htmlFor="checkout-accepted">
                 <input
+                  id="checkout-accepted"
+                  name="accepted"
                   type="checkbox"
                   checked={Boolean(paymentForm.accepted)}
                   onChange={(event) => actions.updatePaymentForm('accepted', event.target.checked)}
+                  aria-invalid={Boolean(checkoutErrors.accepted)}
+                  aria-describedby={[
+                    'checkout-beta-description',
+                    getErrorDescription('accepted'),
+                  ].filter(Boolean).join(' ')}
                 />
-                Entiendo que el pedido queda pendiente de pago hasta completar la pasarela segura o recibir instrucciones de pago.
+                Acepto las condiciones de esta beta: el pedido se registrará como pendiente y no se realizará ningún cargo.
               </label>
-              <FieldError message={checkoutErrors.accepted} />
+              <FieldError field="accepted" message={checkoutErrors.accepted} />
             </div>
+            {checkoutErrors.submit && (
+              <div className="checkout-feedback error" id="checkout-submit" role="alert" tabIndex={-1}>
+                <strong>No se ha registrado el pedido</strong>
+                <span>{checkoutErrors.submit}</span>
+              </div>
+            )}
+            {checkoutSubmitting && (
+              <p className="checkout-operation-status" role="status" aria-live="polite">
+                Registrando el pedido pendiente. No cierres este panel.
+              </p>
+            )}
             <div className="checkout-actions">
-              <button className="secondary" type="button" onClick={() => actions.goToShipping()}>
+              <button className="secondary" type="button" onClick={() => actions.goToShipping()} disabled={checkoutSubmitting}>
                 Volver al envío
               </button>
-              <button className="primary" type="submit" disabled={busy || !session || !cartItems.length}>
-                <ShoppingBag size={18} /> Crear pedido
+              <button className="primary" type="submit" disabled={checkoutSubmitting || !session || !cartItems.length}>
+                <ShoppingBag size={18} /> {checkoutSubmitting ? 'Registrando pedido…' : 'Registrar pedido pendiente'}
               </button>
             </div>
           </form>
@@ -176,18 +201,18 @@ export function CartView({ state, actions }) {
         <div className="total-line"><span>Productos</span><strong>{cartCount}</strong></div>
         <div className="total-line grand"><span>Total</span><strong>{formatCurrency(cartTotal)}</strong></div>
         {checkoutStep === 'items' && (
-          <button className="primary full" type="button" onClick={actions.goToShipping} disabled={!session || !cartItems.length || busy}>
+          <button className="primary full" type="button" onClick={actions.goToShipping} disabled={!session || !cartItems.length}>
             <ShoppingBag size={18} /> Continuar
           </button>
         )}
         {checkoutStep === 'shipping' && (
-          <button className="primary full" type="button" onClick={actions.goToPayment} disabled={!session || !cartItems.length || busy}>
-            <CreditCard size={18} /> Ir a pago
+          <button className="primary full" type="button" onClick={actions.goToPayment} disabled={!session || !cartItems.length}>
+            <ShoppingBag size={18} /> Revisar pedido
           </button>
         )}
         {checkoutStep === 'payment' && (
-          <button className="primary full" type="button" onClick={actions.createOrder} disabled={!session || !cartItems.length || busy}>
-            <ShoppingBag size={18} /> Crear pedido
+          <button className="primary full" type="button" onClick={actions.createOrder} disabled={!session || !cartItems.length || checkoutSubmitting}>
+            <ShoppingBag size={18} /> {checkoutSubmitting ? 'Registrando pedido…' : 'Registrar pedido pendiente'}
           </button>
         )}
       </aside>
