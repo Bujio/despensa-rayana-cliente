@@ -48,6 +48,34 @@ function assertPendingOrderCreated(order) {
   return order;
 }
 
+function assertOrderCancelled(order, expectedOrderId) {
+  const orderId = order?._id || order?.id;
+  const cancelledAt = order?.cancellation?.cancelledAt;
+  const refundStatus = order?.refund?.status;
+  const isCancelledOrder = Boolean(
+    order
+    && typeof order === 'object'
+    && !Array.isArray(order)
+    && orderId
+    && String(orderId) === String(expectedOrderId)
+    && order.status === 'cancelled'
+    && cancelledAt
+    && !Number.isNaN(Date.parse(cancelledAt))
+    && Array.isArray(order.products)
+    && order.products.length
+    && Number.isFinite(Number(order.refund?.amount))
+    && ['pending', 'completed', 'not_required'].includes(refundStatus),
+  );
+
+  if (!isCancelledOrder) {
+    const error = new Error('El servidor no devolvió una confirmación válida de la cancelación.');
+    error.code = 'INVALID_CANCELLATION_CONFIRMATION';
+    throw error;
+  }
+
+  return order;
+}
+
 export const orderModel = {
   async listAll(request) {
     const result = await request('/orders?limit=100');
@@ -73,11 +101,12 @@ export const orderModel = {
   delete(request, orderId) {
     return request('/orders/' + orderId, { method: 'DELETE' });
   },
-  cancel(request, orderId, reason = '') {
-    return request('/orders/' + orderId + '/cancel', {
+  async cancel(request, orderId, reason = '') {
+    const order = await request('/orders/' + orderId + '/cancel', {
       method: 'PATCH',
       body: JSON.stringify({ reason }),
     });
+    return assertOrderCancelled(order, orderId);
   },
   getTotal(order) {
     return order.total || order.products?.reduce((sum, item) => sum + item.price * item.count, 0) || 0;

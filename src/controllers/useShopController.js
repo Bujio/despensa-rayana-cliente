@@ -165,6 +165,66 @@ const getCheckoutSubmitError = (error) => {
   return 'El servidor no pudo confirmar el registro del pedido. Inténtalo de nuevo más tarde.' + preservedDraft;
 };
 
+const getOrderId = (order) => String(order?._id || order?.id || '');
+
+const normalizeOrderEmail = (email) => String(email || '').trim().toLowerCase();
+
+const getSessionOwnerKey = (session) => {
+  const userId = session?.user?._id || session?.user?.id;
+  if (userId) return 'id:' + String(userId);
+  const email = normalizeOrderEmail(session?.user?.email);
+  return email ? 'email:' + email : '';
+};
+
+const getOrderUserId = (order) => {
+  const userId = typeof order?.userId === 'object'
+    ? order.userId?._id || order.userId?.id
+    : order?.userId;
+  return userId ? String(userId) : '';
+};
+
+const isOrderOwnedBySession = (order, session) => {
+  const sessionUserId = String(session?.user?._id || session?.user?.id || '');
+  const orderUserId = getOrderUserId(order);
+  if (sessionUserId && orderUserId) return sessionUserId === orderUserId;
+  return Boolean(
+    normalizeOrderEmail(session?.user?.email)
+    && normalizeOrderEmail(session?.user?.email) === normalizeOrderEmail(order?.email),
+  );
+};
+
+const getOrderCancellationError = (error) => {
+  const normalizedMessage = String(error?.message || '').trim().toLowerCase();
+  const reviewBeforeRetry = ' Actualiza «Pedidos» y comprueba su estado antes de reintentar.';
+
+  if (error?.code === 'INVALID_CANCELLATION_CONFIRMATION' || error?.code === 'INVALID_CANCELLATION_CONTEXT') {
+    return 'El servidor no confirmó de forma fiable la cancelación.' + reviewBeforeRetry;
+  }
+  if (/failed to fetch|networkerror|timeout|aborted|aborterror/.test(normalizedMessage)) {
+    return 'Se perdió la conexión y no podemos confirmar si el pedido llegó a cancelarse.' + reviewBeforeRetry;
+  }
+  if (normalizedMessage.includes('only pending') || normalizedMessage.includes('invalid transition') || normalizedMessage.includes('conflict')) {
+    return 'El pedido ya no está en un estado que permita cancelarlo desde la tienda.' + reviewBeforeRetry;
+  }
+  if (normalizedMessage.includes('not found')) {
+    return 'No se encontró el pedido. Puede haber sido eliminado o actualizado en otra sesión.' + reviewBeforeRetry;
+  }
+  if (normalizedMessage.includes('forbidden') || normalizedMessage.includes('insufficient permissions')) {
+    return 'No tienes permiso para cancelar este pedido.';
+  }
+  if (normalizedMessage.includes('no token') || normalizedMessage.includes('invalid token') || normalizedMessage.includes('unauthorized')) {
+    return 'La sesión ha caducado. Inicia sesión de nuevo y revisa el estado del pedido antes de reintentar.';
+  }
+  if (normalizedMessage.includes('invalid id')) {
+    return 'No se pudo identificar el pedido solicitado.';
+  }
+  if (normalizedMessage.includes('too many')) {
+    return 'Se han realizado demasiados intentos. Espera unos minutos y revisa el estado del pedido.';
+  }
+
+  return 'No se pudo confirmar la cancelación del pedido.' + reviewBeforeRetry;
+};
+
 const formatDateInput = (value) => {
   if (!value) return '';
   const date = new Date(value);
@@ -256,6 +316,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [categories, setCategories] = useState([]);
   const [cart, setCart] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [cancellingOrderIds, setCancellingOrderIds] = useState([]);
+  const [orderCancellationErrors, setOrderCancellationErrors] = useState({});
+  const [orderCancellationFocusTarget, setOrderCancellationFocusTarget] = useState(null);
   const [filters, setFilters] = useState(() => ({ ...emptyFilters }));
   const [favoriteIds, setFavoriteIds] = useState(() => favoritesModel.getAll());
   const [page, setPage] = useState(1);
@@ -288,6 +351,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const checkoutSubmittingRef = useRef(false);
   const preserveCheckoutDraftRef = useRef(false);
   const skipCheckoutSessionReloadRef = useRef(false);
+  const activeSessionRef = useRef(session);
+  const cancellingOrderIdsRef = useRef(new Set());
+  const preserveOrdersOnSessionChangeRef = useRef(false);
+  const skipOrderSessionReloadRef = useRef(false);
 
   const cartItems = cart?.items || [];
   const cartTotal = useMemo(
@@ -332,10 +399,22 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   };
 
   const applySession = (nextSession) => {
+    const currentOwnerKey = getSessionOwnerKey(activeSessionRef.current);
+    const nextOwnerKey = getSessionOwnerKey(nextSession);
     if (checkoutSubmittingRef.current) {
       preserveCheckoutDraftRef.current = true;
       skipCheckoutSessionReloadRef.current = true;
     }
+    if (cancellingOrderIdsRef.current.size) {
+      if (!nextSession) preserveOrdersOnSessionChangeRef.current = true;
+      if (nextOwnerKey && currentOwnerKey === nextOwnerKey) skipOrderSessionReloadRef.current = true;
+    }
+    if (nextOwnerKey && currentOwnerKey !== nextOwnerKey) {
+      setCancellingOrderIds([]);
+      setOrderCancellationErrors({});
+      setOrderCancellationFocusTarget(null);
+    }
+    activeSessionRef.current = nextSession;
     setSession(nextSession);
     if (nextSession) sessionModel.save(nextSession);
     else sessionModel.clear();
@@ -389,12 +468,15 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     if (session) {
       const preserveCheckoutDraft = checkoutSubmittingRef.current || preserveCheckoutDraftRef.current;
       const skipCheckoutSessionReload = skipCheckoutSessionReloadRef.current;
+      const skipOrderSessionReload = skipOrderSessionReloadRef.current;
       if (!preserveCheckoutDraft) setShippingForm(getShippingDefaults(session));
       preserveCheckoutDraftRef.current = false;
       skipCheckoutSessionReloadRef.current = false;
+      preserveOrdersOnSessionChangeRef.current = false;
+      skipOrderSessionReloadRef.current = false;
       if (!skipCheckoutSessionReload) {
         loadCart();
-        loadOrders();
+        if (!skipOrderSessionReload) loadOrders();
         loadMyReviews();
         if (session.user?.role === 'admin') {
           loadAdminProducts();
@@ -404,9 +486,18 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       }
     } else {
       const preserveCheckoutDraft = checkoutSubmittingRef.current || preserveCheckoutDraftRef.current;
+      const preserveOrders = cancellingOrderIdsRef.current.size > 0 || preserveOrdersOnSessionChangeRef.current;
       skipCheckoutSessionReloadRef.current = false;
+      skipOrderSessionReloadRef.current = false;
       if (!preserveCheckoutDraft) setCart(null);
-      setOrders([]);
+      if (!preserveOrders) {
+        setOrders([]);
+        setCancellingOrderIds([]);
+        cancellingOrderIdsRef.current.clear();
+        setOrderCancellationErrors({});
+        setOrderCancellationFocusTarget(null);
+      }
+      preserveOrdersOnSessionChangeRef.current = false;
       setMyReviews([]);
       setAdminReviews([]);
       setReviewForm({ ...emptyReviewForm });
@@ -468,7 +559,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
-  async function loadFeaturedProducts() {
+  async function loadFeaturedProducts({ reportError = true } = {}) {
     try {
       const result = await catalogModel.listProducts({
         page: 1,
@@ -477,7 +568,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       });
       setFeaturedProducts(result.products);
     } catch (error) {
-      setNotice(error.message);
+      if (reportError) setNotice(error.message);
     }
   }
 
@@ -1503,6 +1594,75 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  async function cancelOrder(order) {
+    const orderId = getOrderId(order);
+    const targetOrder = orders.find((item) => getOrderId(item) === orderId);
+    const cancellationOwnerKey = getSessionOwnerKey(session);
+    const setCancellationError = (message) => {
+      if (!orderId) {
+        setNotice(message);
+        return;
+      }
+      setOrderCancellationErrors((current) => ({ ...current, [orderId]: message }));
+      setOrderCancellationFocusTarget({ orderId });
+      setNotice(activeSessionRef.current
+        ? 'No se pudo confirmar la cancelación. Revisa el pedido indicado.'
+        : message);
+    };
+
+    if (!orderId || !targetOrder) {
+      setCancellationError('No se pudo identificar el pedido en la lista actual. Actualiza «Pedidos» antes de reintentar.');
+      return null;
+    }
+    if (!session?.user || session.user.role === 'admin') {
+      setCancellationError('Inicia sesión con la cuenta propietaria para cancelar este pedido.');
+      return null;
+    }
+    if (!isOrderOwnedBySession(targetOrder, session)) {
+      setCancellationError('No tienes permiso para cancelar este pedido.');
+      return null;
+    }
+    if (targetOrder.status !== 'pending') {
+      setCancellationError('Solo los pedidos pendientes pueden cancelarse desde la tienda.');
+      return null;
+    }
+    if (cancellingOrderIdsRef.current.has(orderId)) return null;
+
+    cancellingOrderIdsRef.current.add(orderId);
+    setCancellingOrderIds((current) => (
+      current.includes(orderId) ? current : [...current, orderId]
+    ));
+    setOrderCancellationErrors((current) => ({ ...current, [orderId]: undefined }));
+    setOrderCancellationFocusTarget(null);
+
+    try {
+      const updatedOrder = await orderModel.cancel(request, orderId);
+      if (getSessionOwnerKey(activeSessionRef.current) !== cancellationOwnerKey) return null;
+      if (
+        !isOrderOwnedBySession(updatedOrder, session)
+        || updatedOrder.cancellation?.source !== 'client'
+      ) {
+        const error = new Error('La cancelación no corresponde al pedido solicitado.');
+        error.code = 'INVALID_CANCELLATION_CONTEXT';
+        throw error;
+      }
+
+      setOrders((current) => current.map((item) => (
+        getOrderId(item) === orderId ? updatedOrder : item
+      )));
+      void loadProducts({ reportError: false });
+      void loadFeaturedProducts({ reportError: false });
+      setNotice('Pedido ' + orderId.slice(-6) + ' cancelado. El servidor ha confirmado la anulación.');
+      return updatedOrder;
+    } catch (error) {
+      setCancellationError(getOrderCancellationError(error));
+      return null;
+    } finally {
+      cancellingOrderIdsRef.current.delete(orderId);
+      setCancellingOrderIds((current) => current.filter((id) => id !== orderId));
+    }
+  }
+
   async function deleteOrder(order) {
     const orderId = order._id || order.id;
     if (!orderId || session?.user?.role !== 'admin') return;
@@ -1542,6 +1702,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       checkoutFocusTarget,
       checkoutSubmitting,
       checkoutStep,
+      cancellingOrderIds,
       filters,
       favoriteIds,
       featuredProducts,
@@ -1552,6 +1713,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       loadingProducts,
       myReviews,
       notice,
+      orderCancellationErrors,
+      orderCancellationFocusTarget,
       orders,
       page,
       pagination,
@@ -1577,6 +1740,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     actions: {
       addToCart,
       clearCart,
+      cancelOrder,
       createCategory,
       createProduct,
       createOrder,
