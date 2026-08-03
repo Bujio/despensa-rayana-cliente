@@ -29,13 +29,23 @@ async function refreshSession(session) {
       },
       null,
     );
-    const updated = { ...session, ...next, user: next.user || session.user };
-    sessionModel.save(updated);
-    return updated;
+    return { ...session, ...next, user: next.user || session.user };
   } catch {
-    sessionModel.clear();
     return null;
   }
+}
+
+function applySessionChange(nextSession, onSessionChange) {
+  if (onSessionChange) return onSessionChange(nextSession) !== false;
+  if (nextSession) sessionModel.save(nextSession);
+  else sessionModel.clear();
+  return true;
+}
+
+function createStaleSessionError() {
+  const error = new Error('La sesión cambió durante la solicitud.');
+  error.code = 'STALE_SESSION';
+  return error;
 }
 
 export async function apiRequest(path, options = {}, session = sessionModel.get(), onSessionChange) {
@@ -55,13 +65,10 @@ export async function apiRequest(path, options = {}, session = sessionModel.get(
     headers,
   });
 
-  if (response.status === 401 && session?.refreshToken && path !== '/auth/refresh') {
-    const refreshed = await refreshSession(session);
-    if (refreshed) {
-      onSessionChange?.(refreshed);
-      return apiRequest(path, options, refreshed, onSessionChange);
-    }
-    onSessionChange?.(null);
+  if (response.status === 401 && session && path !== '/auth/refresh') {
+    const refreshed = session.refreshToken ? await refreshSession(session) : null;
+    if (!applySessionChange(refreshed, onSessionChange)) throw createStaleSessionError();
+    if (refreshed) return apiRequest(path, options, refreshed, onSessionChange);
   }
 
   const payload = await readJson(response);

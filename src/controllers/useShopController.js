@@ -353,7 +353,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const skipCheckoutSessionReloadRef = useRef(false);
   const activeSessionRef = useRef(session);
   const cancellingOrderIdsRef = useRef(new Set());
-  const preserveOrdersOnSessionChangeRef = useRef(false);
   const skipOrderSessionReloadRef = useRef(false);
 
   const cartItems = cart?.items || [];
@@ -401,18 +400,29 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const applySession = (nextSession) => {
     const currentOwnerKey = getSessionOwnerKey(activeSessionRef.current);
     const nextOwnerKey = getSessionOwnerKey(nextSession);
+    const ownerChanged = currentOwnerKey !== nextOwnerKey;
     if (checkoutSubmittingRef.current) {
       preserveCheckoutDraftRef.current = true;
       skipCheckoutSessionReloadRef.current = true;
     }
     if (cancellingOrderIdsRef.current.size) {
-      if (!nextSession) preserveOrdersOnSessionChangeRef.current = true;
       if (nextOwnerKey && currentOwnerKey === nextOwnerKey) skipOrderSessionReloadRef.current = true;
     }
-    if (nextOwnerKey && currentOwnerKey !== nextOwnerKey) {
+    if (ownerChanged) {
+      setCart(null);
+      setOrders([]);
+      setMyReviews([]);
+      setAdminReviews([]);
+      setAdminProducts([]);
+      setAdminUsers([]);
       setCancellingOrderIds([]);
       setOrderCancellationErrors({});
       setOrderCancellationFocusTarget(null);
+      setSelectedAccountReviewId('');
+      setSelectedAdminUserId('');
+      setSelectedAdminOrderId('');
+      setSelectedAdminProductId('');
+      setSelectedAdminCategoryId('');
     }
     activeSessionRef.current = nextSession;
     setSession(nextSession);
@@ -420,7 +430,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     else sessionModel.clear();
   };
 
-  const request = (path, options) => apiRequest(path, options, session, applySession);
+  const request = (path, options) => {
+    const requestOwnerKey = getSessionOwnerKey(session);
+    return apiRequest(path, options, session, (nextSession) => {
+      if (getSessionOwnerKey(activeSessionRef.current) !== requestOwnerKey) return false;
+      applySession(nextSession);
+      return true;
+    });
+  };
 
   const setView = (nextView, options = {}) => {
     const nextPath = buildRoute(nextView, {
@@ -472,7 +489,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       if (!preserveCheckoutDraft) setShippingForm(getShippingDefaults(session));
       preserveCheckoutDraftRef.current = false;
       skipCheckoutSessionReloadRef.current = false;
-      preserveOrdersOnSessionChangeRef.current = false;
       skipOrderSessionReloadRef.current = false;
       if (!skipCheckoutSessionReload) {
         loadCart();
@@ -486,18 +502,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       }
     } else {
       const preserveCheckoutDraft = checkoutSubmittingRef.current || preserveCheckoutDraftRef.current;
-      const preserveOrders = cancellingOrderIdsRef.current.size > 0 || preserveOrdersOnSessionChangeRef.current;
       skipCheckoutSessionReloadRef.current = false;
       skipOrderSessionReloadRef.current = false;
       if (!preserveCheckoutDraft) setCart(null);
-      if (!preserveOrders) {
-        setOrders([]);
-        setCancellingOrderIds([]);
-        cancellingOrderIdsRef.current.clear();
-        setOrderCancellationErrors({});
-        setOrderCancellationFocusTarget(null);
-      }
-      preserveOrdersOnSessionChangeRef.current = false;
+      setOrders([]);
+      setCancellingOrderIds([]);
+      setOrderCancellationErrors({});
+      setOrderCancellationFocusTarget(null);
       setMyReviews([]);
       setAdminReviews([]);
       setReviewForm({ ...emptyReviewForm });
@@ -620,60 +631,73 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   async function loadMyReviews() {
     if (!session?.accessToken) return;
+    const ownerKey = getSessionOwnerKey(session);
     try {
-      setMyReviews(await reviewModel.listMine(request));
+      const nextReviews = await reviewModel.listMine(request);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setMyReviews(nextReviews);
     } catch {
-      setMyReviews([]);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setMyReviews([]);
     }
   }
 
   async function loadAdminReviews() {
     if (session?.user?.role !== 'admin') return;
+    const ownerKey = getSessionOwnerKey(session);
     try {
-      setAdminReviews(await reviewModel.listAll(request));
+      const nextReviews = await reviewModel.listAll(request);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setAdminReviews(nextReviews);
     } catch {
-      setAdminReviews([]);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setAdminReviews([]);
     }
   }
 
   async function loadAdminProducts() {
+    const ownerKey = getSessionOwnerKey(session);
     try {
       const result = await catalogModel.listProducts({
         page: 1,
         filters: { ...emptyFilters, inStock: false },
         limit: 100,
       });
-      setAdminProducts(result.products);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setAdminProducts(result.products);
     } catch (error) {
-      setNotice(error.message);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setNotice(error.message);
     }
   }
 
   async function loadAdminUsers() {
+    const ownerKey = getSessionOwnerKey(session);
     try {
-      setAdminUsers(await adminModel.listUsers(request));
+      const nextUsers = await adminModel.listUsers(request);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setAdminUsers(nextUsers);
     } catch (error) {
-      setNotice(error.message);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setNotice(error.message);
     }
   }
 
   async function loadCart() {
+    const ownerKey = getSessionOwnerKey(session);
     try {
-      setCart(await cartModel.get(request));
+      const nextCart = await cartModel.get(request);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setCart(nextCart);
     } catch (error) {
-      setNotice(error.message);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setNotice(error.message);
     }
   }
 
   async function loadOrders() {
-    try {
-      if (session?.user?.role === 'admin') {
-        setOrders(await orderModel.listAll(request));
-      } else {
-        setOrders(await orderModel.listByEmail(request, session?.user?.email));
-      }
-    } catch {
+    const ownerKey = getSessionOwnerKey(session);
+    if (!ownerKey) {
       setOrders([]);
+      return;
+    }
+    try {
+      const nextOrders = session?.user?.role === 'admin'
+        ? await orderModel.listAll(request)
+        : await orderModel.listByEmail(request, session?.user?.email);
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setOrders(nextOrders);
+    } catch {
+      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setOrders([]);
     }
   }
 
@@ -1655,7 +1679,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setNotice('Pedido ' + orderId.slice(-6) + ' cancelado. El servidor ha confirmado la anulación.');
       return updatedOrder;
     } catch (error) {
-      setCancellationError(getOrderCancellationError(error));
+      if (getSessionOwnerKey(activeSessionRef.current) === cancellationOwnerKey) {
+        setCancellationError(getOrderCancellationError(error));
+      }
       return null;
     } finally {
       cancellingOrderIdsRef.current.delete(orderId);

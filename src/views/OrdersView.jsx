@@ -15,18 +15,71 @@ export function OrdersView({ state, actions }) {
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [orderToCancel, setOrderToCancel] = useState(null);
   const [focusAfterConfirmationId, setFocusAfterConfirmationId] = useState('');
+  const [cancelDialogFallback, setCancelDialogFallback] = useState(false);
   const cancelDialogRef = useRef(null);
+  const cancelDialogInitialFocusRef = useRef(null);
   const cancelTriggerRef = useRef(null);
   const restoreCancelTriggerFocusRef = useRef(false);
   const isAdmin = session?.user?.role === 'admin';
-  const getOrderId = (order) => order._id || order.id || '';
+  const getOrderId = (order) => order?._id || order?.id || '';
+  const sessionOwnerKey = String(
+    session?.user?._id || session?.user?.id || session?.user?.email || '',
+  ).toLowerCase();
+  const orderToCancelId = getOrderId(orderToCancel);
 
   useEffect(() => {
     const dialog = cancelDialogRef.current;
     if (!dialog) return;
-    if (orderToCancel && !dialog.open) dialog.showModal();
-    if (!orderToCancel && dialog.open) dialog.close();
+    let focusFrame;
+
+    if (orderToCancel) {
+      let fallbackActive = dialog.dataset.cancelFallback === 'true';
+      if (!dialog.open) {
+        try {
+          if (typeof dialog.showModal !== 'function') throw new Error('Dialog API unavailable');
+          dialog.showModal();
+          delete dialog.dataset.cancelFallback;
+          fallbackActive = false;
+        } catch {
+          dialog.setAttribute('open', '');
+          dialog.dataset.cancelFallback = 'true';
+          fallbackActive = true;
+        }
+      }
+      setCancelDialogFallback(fallbackActive);
+      focusFrame = window.requestAnimationFrame(() => cancelDialogInitialFocusRef.current?.focus());
+    } else {
+      if (dialog.open) {
+        try {
+          dialog.close();
+        } catch {
+          dialog.removeAttribute('open');
+        }
+      }
+      delete dialog.dataset.cancelFallback;
+      setCancelDialogFallback(false);
+    }
+
+    return () => {
+      if (focusFrame) window.cancelAnimationFrame(focusFrame);
+    };
   }, [orderToCancel]);
+
+  useEffect(() => {
+    setSelectedOrderId('');
+    setFocusAfterConfirmationId('');
+    restoreCancelTriggerFocusRef.current = false;
+    setOrderToCancel(null);
+  }, [sessionOwnerKey]);
+
+  useEffect(() => {
+    if (!orderToCancelId) return;
+    const remainsAvailable = orders.some((order) => getOrderId(order) === orderToCancelId);
+    if (!remainsAvailable) {
+      restoreCancelTriggerFocusRef.current = false;
+      setOrderToCancel(null);
+    }
+  }, [orderToCancelId, orders]);
 
   useEffect(() => {
     if (!orderToCancel && restoreCancelTriggerFocusRef.current) {
@@ -46,6 +99,18 @@ export function OrdersView({ state, actions }) {
     if (!orderId) return;
     document.getElementById('order-cancel-error-' + orderId)?.focus();
   }, [orderCancellationFocusTarget]);
+
+  useEffect(() => {
+    if (!cancelDialogFallback) return;
+    const closeFallbackOnEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      restoreCancelTriggerFocusRef.current = true;
+      setOrderToCancel(null);
+    };
+    document.addEventListener('keydown', closeFallbackOnEscape);
+    return () => document.removeEventListener('keydown', closeFallbackOnEscape);
+  }, [cancelDialogFallback]);
 
   const openCancelConfirmation = (order) => {
     cancelTriggerRef.current = document.activeElement;
@@ -191,6 +256,7 @@ export function OrdersView({ state, actions }) {
       <dialog
         aria-describedby="cancel-order-description"
         aria-labelledby="cancel-order-title"
+        aria-modal={cancelDialogFallback ? undefined : 'true'}
         className="order-cancel-dialog"
         ref={cancelDialogRef}
         onCancel={(event) => {
@@ -203,9 +269,19 @@ export function OrdersView({ state, actions }) {
           <div className="order-cancel-dialog-copy" id="cancel-order-description">
             <p>Vas a cancelar el pedido {String(getOrderId(orderToCancel)).slice(-6)}.</p>
             <p>La cancelación no podrá revertirse desde esta interfaz.</p>
+            {cancelDialogFallback && (
+              <p className="order-cancel-unavailable" role="status">
+                El navegador no pudo activar el modo modal. Puedes confirmar o conservar el pedido en este panel.
+              </p>
+            )}
           </div>
           <div className="order-cancel-dialog-actions">
-            <button className="secondary" type="button" onClick={closeCancelConfirmation}>
+            <button
+              className="secondary"
+              ref={cancelDialogInitialFocusRef}
+              type="button"
+              onClick={closeCancelConfirmation}
+            >
               Conservar pedido
             </button>
             <button className="secondary danger-button" type="button" onClick={confirmOrderCancellation}>
