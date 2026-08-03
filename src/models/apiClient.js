@@ -1,6 +1,8 @@
 import { sessionModel } from './sessionModel.js';
 
 const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:3000/api';
+const refreshRequestsByToken = new Map();
+const SESSION_REFRESH_UNAVAILABLE_MESSAGE = 'No se ha podido comprobar tu sesión temporalmente. La operación no se ha enviado. Inténtalo de nuevo.';
 
 async function readJson(response) {
   const text = await response.text();
@@ -19,7 +21,40 @@ function getErrorMessage(payload) {
   return payload?.message || 'No se pudo completar la operación';
 }
 
-async function refreshSession(session) {
+function getSafeRefreshFailureCause(error) {
+  const status = Number.isInteger(error?.status) ? error.status : undefined;
+  if (status) {
+    return { type: 'http', code: 'HTTP_' + status, status };
+  }
+  if (error?.code === 'INVALID_SESSION_REFRESH_RESPONSE') {
+    return { type: 'response', code: 'INVALID_SESSION_REFRESH_RESPONSE' };
+  }
+  if (error?.name === 'AbortError' || error?.code === 'ETIMEDOUT') {
+    return { type: 'timeout', code: 'SESSION_REFRESH_TIMEOUT' };
+  }
+  return { type: 'transport', code: 'SESSION_REFRESH_NETWORK_ERROR' };
+}
+
+function createSessionExpiredError(status = 401, causeCode = 'SESSION_REFRESH_REJECTED') {
+  const error = new Error('La sesión ya no es válida.');
+  error.name = 'ApiError';
+  error.code = 'SESSION_EXPIRED';
+  error.status = status;
+  error.cause = { type: 'http', code: causeCode, status };
+  return error;
+}
+
+function createSessionRefreshUnavailableError(sourceError) {
+  const cause = getSafeRefreshFailureCause(sourceError);
+  const error = new Error(SESSION_REFRESH_UNAVAILABLE_MESSAGE);
+  error.name = 'ApiError';
+  error.code = 'SESSION_REFRESH_UNAVAILABLE';
+  if (cause.status) error.status = cause.status;
+  error.cause = cause;
+  return error;
+}
+
+async function performSessionRefresh(session) {
   try {
     const next = await apiRequest(
       '/auth/refresh',
@@ -29,9 +64,50 @@ async function refreshSession(session) {
       },
       null,
     );
-    return { ...session, ...next, user: next.user || session.user };
-  } catch {
-    return null;
+    if (!next?.accessToken || !next?.refreshToken) {
+      const invalidResponse = new Error('Invalid session refresh response');
+      invalidResponse.code = 'INVALID_SESSION_REFRESH_RESPONSE';
+      throw invalidResponse;
+    }
+    return {
+      kind: 'refreshed',
+      session: { ...session, ...next, user: next.user || session.user },
+    };
+  } catch (error) {
+    if (error?.status === 401 || error?.status === 403) {
+      return {
+        kind: 'expired',
+        error: createSessionExpiredError(error.status),
+      };
+    }
+    return {
+      kind: 'unavailable',
+      error: createSessionRefreshUnavailableError(error),
+    };
+  }
+}
+
+async function refreshSession(session) {
+  const refreshToken = session?.refreshToken;
+  if (!refreshToken) {
+    return {
+      kind: 'expired',
+      error: createSessionExpiredError(401, 'REFRESH_TOKEN_MISSING'),
+    };
+  }
+
+  let refreshRequest = refreshRequestsByToken.get(refreshToken);
+  if (!refreshRequest) {
+    refreshRequest = performSessionRefresh(session);
+    refreshRequestsByToken.set(refreshToken, refreshRequest);
+  }
+
+  try {
+    return await refreshRequest;
+  } finally {
+    if (refreshRequestsByToken.get(refreshToken) === refreshRequest) {
+      refreshRequestsByToken.delete(refreshToken);
+    }
   }
 }
 
@@ -56,10 +132,9 @@ function createApiError(response, payload, code = 'HTTP_ERROR') {
   return error;
 }
 
-export async function apiRequest(path, options = {}, session = sessionModel.get(), onSessionChange) {
+async function performApiRequest(path, options, session, onSessionChange, refreshAttempted) {
   const headers = new Headers(options.headers || {});
   const hasFormData = options.body instanceof FormData;
-  let sessionExpired = false;
 
   if (!hasFormData && options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -75,22 +150,33 @@ export async function apiRequest(path, options = {}, session = sessionModel.get(
   });
 
   if (response.status === 401 && session && path !== '/auth/refresh') {
-    const refreshed = session.refreshToken ? await refreshSession(session) : null;
-    if (!applySessionChange(refreshed, onSessionChange)) throw createStaleSessionError();
-    if (refreshed) return apiRequest(path, options, refreshed, onSessionChange);
-    sessionExpired = true;
+    if (refreshAttempted) {
+      if (!applySessionChange(null, onSessionChange)) throw createStaleSessionError();
+      throw createSessionExpiredError(response.status, 'RETRIED_REQUEST_UNAUTHORIZED');
+    }
+
+    const refreshResult = await refreshSession(session);
+    if (refreshResult.kind === 'unavailable') throw refreshResult.error;
+    if (refreshResult.kind === 'expired') {
+      if (!applySessionChange(null, onSessionChange)) throw createStaleSessionError();
+      throw refreshResult.error;
+    }
+    if (!applySessionChange(refreshResult.session, onSessionChange)) {
+      throw createStaleSessionError();
+    }
+    return performApiRequest(path, options, refreshResult.session, onSessionChange, true);
   }
 
   const payload = await readJson(response);
   if (!response.ok) {
-    throw createApiError(
-      response,
-      payload,
-      sessionExpired ? 'SESSION_EXPIRED' : 'HTTP_ERROR',
-    );
+    throw createApiError(response, payload);
   }
 
   return payload;
+}
+
+export function apiRequest(path, options = {}, session = sessionModel.get(), onSessionChange) {
+  return performApiRequest(path, options, session, onSessionChange, false);
 }
 
 export { API_URL };

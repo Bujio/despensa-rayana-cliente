@@ -204,6 +204,7 @@ const getReviewUserId = (review) => String(
 );
 
 const PRODUCT_REVIEW_SESSION_EXPIRED_MESSAGE = 'Tu sesión ha caducado y la opinión no se ha guardado. Inicia sesión nuevamente para continuar.';
+const PRODUCT_REVIEW_SESSION_REFRESH_UNAVAILABLE_MESSAGE = 'No se ha podido comprobar tu sesión temporalmente. La opinión no se ha enviado. Inténtalo de nuevo.';
 
 const isReviewOwnedBySession = (review, session) => Boolean(
   getReviewUserId(review)
@@ -245,6 +246,9 @@ const getProductReviewSubmitError = (error) => {
   const message = String(error?.message || '').trim().toLowerCase();
   if (error?.code === 'SESSION_EXPIRED') {
     return PRODUCT_REVIEW_SESSION_EXPIRED_MESSAGE;
+  }
+  if (error?.code === 'SESSION_REFRESH_UNAVAILABLE') {
+    return PRODUCT_REVIEW_SESSION_REFRESH_UNAVAILABLE_MESSAGE;
   }
   if (error?.code === 'INVALID_REVIEW_CONFIRMATION' || error?.code === 'INVALID_REVIEW_CONTEXT') {
     return 'El servidor no confirmó la opinión de forma fiable. Recarga el producto antes de reintentar.';
