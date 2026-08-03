@@ -22,7 +22,23 @@ function ProductDescription({ content }) {
 }
 
 export function ProductView({ state, actions }) {
-  const { busy, favoriteIds, loadingProductDetail, productReviews, reservedBySku, reviewForm, selectedProduct, session } = state;
+  const {
+    busy,
+    favoriteIds,
+    loadingProductDetail,
+    productReviewErrors,
+    productReviewFeedback,
+    productReviewFocusTarget,
+    productReviewSubmitting,
+    productReviews,
+    productReviewsLoadedFor,
+    productReviewsLoadError,
+    productReviewsLoading,
+    reservedBySku,
+    reviewForm,
+    selectedProduct,
+    session,
+  } = state;
   const [quantity, setQuantity] = useState(1);
   const [imageFailed, setImageFailed] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
@@ -36,6 +52,15 @@ export function ProductView({ state, actions }) {
     setImageFailed(false);
     setSelectedImage(gallery[0]?.url || '');
   }, [gallery, selectedProduct?._id, selectedProduct?.id, selectedProduct?.sku]);
+
+  useEffect(() => {
+    const field = productReviewFocusTarget?.field;
+    if (!field) return undefined;
+    const focusFrame = window.requestAnimationFrame(() => {
+      document.getElementById('product-review-' + field)?.focus();
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [productReviewFocusTarget]);
 
   if (!selectedProduct) {
     return (
@@ -60,6 +85,7 @@ export function ProductView({ state, actions }) {
   const isFavorite = favoriteIds.includes(selectedProductId);
   const reviewSummary = reviewModel.getSummary(productReviews);
   const ownReview = productReviews.find((review) => String(review.user?._id || review.user?.id || review.user) === String(session?.user?.id || session?.user?._id));
+  const productReviewsReady = productReviewsLoadedFor === selectedProductId && !productReviewsLoading;
   const shortDescription = selectedProduct.shortDescription || selectedProduct.description || 'Producto local seleccionado para tu despensa.';
   const longDescription = selectedProduct.description || selectedProduct.shortDescription || '';
 
@@ -195,12 +221,32 @@ export function ProductView({ state, actions }) {
 
         {activeTab === 'reviews' && (
           <div className="tab-content reviews-layout">
-            <form className="review-form" onSubmit={actions.submitProductReview}>
-              <div className="admin-panel-title"><MessageSquare size={18} /> {ownReview ? 'Actualiza tu opinión' : 'Añade tu opinión'}</div>
+            <form className="review-form" onSubmit={actions.submitProductReview} noValidate>
+              <div className="admin-panel-title">
+                <MessageSquare size={18} />
+                {productReviewsReady && ownReview ? 'Actualiza tu opinión' : 'Añade tu opinión'}
+              </div>
               {!session && <p className="soft-note">Entra en tu cuenta para escribir una valoración.</p>}
-              <label>
+              {productReviewsLoading && (
+                <p className="review-operation-status" role="status">
+                  Comprobando tus opiniones para este producto…
+                </p>
+              )}
+              {productReviewsLoadError && (
+                <p className="review-feedback error" role="alert">
+                  {productReviewsLoadError}
+                </p>
+              )}
+              <label htmlFor="product-review-rating">
                 Valoración
-                <select value={reviewForm.rating} onChange={(event) => actions.updateReviewForm('rating', event.target.value)} disabled={!session}>
+                <select
+                  aria-describedby={productReviewErrors.rating ? 'product-review-rating-error' : undefined}
+                  aria-invalid={Boolean(productReviewErrors.rating)}
+                  id="product-review-rating"
+                  value={reviewForm.rating}
+                  onChange={(event) => actions.updateReviewForm('rating', event.target.value)}
+                  disabled={!session || productReviewSubmitting || !productReviewsReady}
+                >
                   <option value="5">5 estrellas</option>
                   <option value="4">4 estrellas</option>
                   <option value="3">3 estrellas</option>
@@ -208,9 +254,63 @@ export function ProductView({ state, actions }) {
                   <option value="1">1 estrella</option>
                 </select>
               </label>
-              <label>Título<input value={reviewForm.title} onChange={(event) => actions.updateReviewForm('title', event.target.value)} disabled={!session} /></label>
-              <label>Opinión<textarea required minLength="3" value={reviewForm.comment} onChange={(event) => actions.updateReviewForm('comment', event.target.value)} disabled={!session} /></label>
-              <button className="primary full" type="submit" disabled={busy || !session}>Guardar opinión</button>
+              {productReviewErrors.rating && <span className="field-error" id="product-review-rating-error">{productReviewErrors.rating}</span>}
+              <label htmlFor="product-review-title">
+                Título
+                <input
+                  aria-describedby={productReviewErrors.title ? 'product-review-title-error' : undefined}
+                  aria-invalid={Boolean(productReviewErrors.title)}
+                  id="product-review-title"
+                  maxLength="120"
+                  value={reviewForm.title}
+                  onChange={(event) => actions.updateReviewForm('title', event.target.value)}
+                  disabled={!session || productReviewSubmitting || !productReviewsReady}
+                />
+              </label>
+              {productReviewErrors.title && <span className="field-error" id="product-review-title-error">{productReviewErrors.title}</span>}
+              <label htmlFor="product-review-comment">
+                Opinión
+                <textarea
+                  aria-describedby={productReviewErrors.comment ? 'product-review-comment-error' : undefined}
+                  aria-invalid={Boolean(productReviewErrors.comment)}
+                  id="product-review-comment"
+                  maxLength="2000"
+                  minLength="3"
+                  required
+                  value={reviewForm.comment}
+                  onChange={(event) => actions.updateReviewForm('comment', event.target.value)}
+                  disabled={!session || productReviewSubmitting || !productReviewsReady}
+                />
+              </label>
+              {productReviewErrors.comment && <span className="field-error" id="product-review-comment-error">{productReviewErrors.comment}</span>}
+              {productReviewErrors.submit && (
+                <p
+                  className="review-feedback error"
+                  id="product-review-submit"
+                  role="alert"
+                  tabIndex="-1"
+                >
+                  {productReviewErrors.submit}
+                </p>
+              )}
+              {productReviewFeedback && (
+                <p className="review-feedback success" role="status">{productReviewFeedback}</p>
+              )}
+              {productReviewSubmitting && (
+                <p className="review-operation-status" role="status">
+                  {ownReview ? 'Actualizando tu opinión…' : 'Publicando tu opinión…'}
+                </p>
+              )}
+              <button
+                aria-describedby={productReviewErrors.submit ? 'product-review-submit' : undefined}
+                className="primary full"
+                type="submit"
+                disabled={productReviewSubmitting || !session || !productReviewsReady}
+              >
+                {productReviewSubmitting
+                  ? ownReview ? 'Actualizando…' : 'Publicando…'
+                  : ownReview ? 'Actualizar opinión' : 'Publicar opinión'}
+              </button>
             </form>
 
             <div className="reviews-list">

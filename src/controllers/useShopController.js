@@ -193,6 +193,81 @@ const isOrderOwnedBySession = (order, session) => {
   );
 };
 
+const getReviewId = (review) => String(review?._id || review?.id || '');
+
+const getReviewProductId = (review) => String(
+  review?.product?._id || review?.product?.id || review?.product || '',
+);
+
+const getReviewUserId = (review) => String(
+  review?.user?._id || review?.user?.id || review?.user || '',
+);
+
+const isReviewOwnedBySession = (review, session) => Boolean(
+  getReviewUserId(review)
+  && getReviewUserId(review) === String(session?.user?._id || session?.user?.id || ''),
+);
+
+const normalizeReviewForm = (form) => ({
+  rating: Number(form?.rating || 0),
+  title: String(form?.title || '').trim(),
+  comment: String(form?.comment || '').trim(),
+});
+
+const validateReviewForm = (form) => {
+  const normalized = normalizeReviewForm(form);
+  const errors = {};
+  if (!Number.isInteger(normalized.rating) || normalized.rating < 1 || normalized.rating > 5) {
+    errors.rating = 'Selecciona una valoración entre 1 y 5 estrellas.';
+  }
+  if (normalized.title.length > 120) {
+    errors.title = 'El título no puede superar los 120 caracteres.';
+  }
+  if (normalized.comment.length < 3) {
+    errors.comment = 'La opinión debe tener al menos 3 caracteres.';
+  } else if (normalized.comment.length > 2000) {
+    errors.comment = 'La opinión no puede superar los 2000 caracteres.';
+  }
+  return { errors, normalized };
+};
+
+const replaceReviewById = (reviews, review) => {
+  const reviewId = getReviewId(review);
+  const current = Array.isArray(reviews) ? reviews : [];
+  const existingIndex = current.findIndex((item) => getReviewId(item) === reviewId);
+  if (existingIndex < 0) return [review, ...current];
+  return current.map((item, index) => (index === existingIndex ? review : item));
+};
+
+const getProductReviewSubmitError = (error) => {
+  const message = String(error?.message || '').trim().toLowerCase();
+  if (error?.code === 'INVALID_REVIEW_CONFIRMATION' || error?.code === 'INVALID_REVIEW_CONTEXT') {
+    return 'El servidor no confirmó la opinión de forma fiable. Recarga el producto antes de reintentar.';
+  }
+  if (/failed to fetch|networkerror|timeout|aborted|aborterror/.test(message)) {
+    return 'Se perdió la conexión. Conservamos tu texto; comprueba la opinión antes de volver a enviarla.';
+  }
+  if (message.includes('no token') || message.includes('invalid token') || message.includes('unauthorized')) {
+    return 'La sesión ha caducado. Inicia sesión de nuevo; el texto permanece en este formulario mientras no cambies de usuario o producto.';
+  }
+  if (message.includes('forbidden')) {
+    return 'No tienes permiso para modificar esta opinión.';
+  }
+  if (message.includes('not found')) {
+    return 'La opinión ya no existe o el producto cambió. Conservamos tu texto para que puedas revisarlo.';
+  }
+  if (message.includes('rating')) {
+    return 'La valoración debe estar entre 1 y 5 estrellas.';
+  }
+  if (message.includes('comment')) {
+    return 'La opinión debe tener entre 3 y 2000 caracteres.';
+  }
+  if (message.includes('too many')) {
+    return 'Se han realizado demasiados intentos. Espera unos minutos; tu texto permanece en el formulario.';
+  }
+  return 'No se pudo guardar la opinión. Conservamos los datos para que puedas revisarlos o reintentar.';
+};
+
 const getOrderCancellationError = (error) => {
   const normalizedMessage = String(error?.message || '').trim().toLowerCase();
   const reviewBeforeRetry = ' Actualiza «Pedidos» y comprueba su estado antes de reintentar.';
@@ -310,6 +385,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [myReviews, setMyReviews] = useState([]);
   const [adminReviews, setAdminReviews] = useState([]);
   const [reviewForm, setReviewForm] = useState(() => ({ ...emptyReviewForm }));
+  const [productReviewErrors, setProductReviewErrors] = useState({});
+  const [productReviewFeedback, setProductReviewFeedback] = useState('');
+  const [productReviewFocusTarget, setProductReviewFocusTarget] = useState(null);
+  const [productReviewSubmitting, setProductReviewSubmitting] = useState(false);
+  const [productReviewsLoading, setProductReviewsLoading] = useState(false);
+  const [productReviewsLoadedFor, setProductReviewsLoadedFor] = useState('');
+  const [productReviewsLoadError, setProductReviewsLoadError] = useState('');
   const [accountReviewForm, setAccountReviewForm] = useState(() => ({ ...emptyReviewForm }));
   const [selectedAccountReviewId, setSelectedAccountReviewId] = useState('');
   const [loadingProductDetail, setLoadingProductDetail] = useState(false);
@@ -354,6 +436,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const activeSessionRef = useRef(session);
   const cancellingOrderIdsRef = useRef(new Set());
   const skipOrderSessionReloadRef = useRef(false);
+  const activeProductIdRef = useRef(getProductId(selectedProduct));
+  const productReviewLoadSequenceRef = useRef(0);
+  const productReviewsLoadedForRef = useRef('');
+  const productReviewFormContextRef = useRef('');
+  const productReviewSubmittingKeysRef = useRef(new Set());
 
   const cartItems = cart?.items || [];
   const cartTotal = useMemo(
@@ -389,6 +476,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     () => orders.find((order) => (order._id || order.id) === selectedAdminOrderId) || null,
     [orders, selectedAdminOrderId],
   );
+  const selectedProductId = getProductId(selectedProduct);
+  const productReviewOwnerKey = getSessionOwnerKey(session);
+  const ownProductReview = productReviews.find((review) => isReviewOwnedBySession(review, session));
+  const ownProductReviewId = getReviewId(ownProductReview);
 
   const saveHomeContent = (updater) => {
     setHomeContent((current) => {
@@ -413,6 +504,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setOrders([]);
       setMyReviews([]);
       setAdminReviews([]);
+      setReviewForm({ ...emptyReviewForm });
+      setProductReviewErrors({});
+      setProductReviewFeedback('');
+      setProductReviewFocusTarget(null);
+      setProductReviewSubmitting(false);
+      productReviewFormContextRef.current = '';
       setAdminProducts([]);
       setAdminUsers([]);
       setCancellingOrderIds([]);
@@ -450,6 +547,51 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   };
 
+  const focusProductReviewField = (field) => {
+    setProductReviewFocusTarget((current) => ({
+      field,
+      version: Number(current?.version || 0) + 1,
+    }));
+  };
+
+  useEffect(() => {
+    productReviewFormContextRef.current = '';
+    setReviewForm({ ...emptyReviewForm });
+    setProductReviewErrors({});
+    setProductReviewFeedback('');
+    setProductReviewFocusTarget(null);
+    setProductReviewSubmitting(false);
+  }, [selectedProductId, productReviewOwnerKey]);
+
+  useEffect(() => {
+    if (
+      !selectedProductId
+      || !productReviewOwnerKey
+      || productReviewsLoading
+      || productReviewsLoadedFor !== selectedProductId
+    ) return;
+
+    const contextKey = selectedProductId + '|' + productReviewOwnerKey;
+    if (productReviewFormContextRef.current === contextKey) return;
+
+    productReviewFormContextRef.current = contextKey;
+    setReviewForm(ownProductReview ? {
+      rating: Number(ownProductReview.rating || 5),
+      title: ownProductReview.title || '',
+      comment: ownProductReview.comment || '',
+    } : { ...emptyReviewForm });
+    setProductReviewErrors({});
+    setProductReviewFeedback('');
+    setProductReviewFocusTarget(null);
+  }, [
+    ownProductReview,
+    ownProductReviewId,
+    productReviewOwnerKey,
+    productReviewsLoadedFor,
+    productReviewsLoading,
+    selectedProductId,
+  ]);
+
   useEffect(() => {
     loadCategories();
     loadFeaturedProducts();
@@ -458,8 +600,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   useEffect(() => {
     if (routeView !== 'product') {
+      activeProductIdRef.current = '';
+      productReviewLoadSequenceRef.current += 1;
+      productReviewsLoadedForRef.current = '';
       setSelectedProduct(null);
       setProductReviews([]);
+      setProductReviewsLoading(false);
+      setProductReviewsLoadedFor('');
+      setProductReviewsLoadError('');
     }
   }, [routeView]);
 
@@ -583,10 +731,24 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  function beginProductReviewContext(productId) {
+    const nextProductId = String(productId || '');
+    if (activeProductIdRef.current === nextProductId) return;
+
+    activeProductIdRef.current = nextProductId;
+    productReviewLoadSequenceRef.current += 1;
+    productReviewsLoadedForRef.current = '';
+    setProductReviews([]);
+    setProductReviewsLoading(Boolean(nextProductId));
+    setProductReviewsLoadedFor('');
+    setProductReviewsLoadError('');
+  }
+
   async function openProduct(product) {
     const productId = product?._id || product?.id;
     if (!productId) return;
 
+    beginProductReviewContext(productId);
     setSelectedProduct(product);
     setView('product', { productId });
     setLoadingProductDetail(true);
@@ -607,6 +769,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     const selectedId = selectedProduct?._id || selectedProduct?.id;
     if (String(selectedId || '') === String(productId) && selectedProduct?.name) return;
 
+    beginProductReviewContext(productId);
     setLoadingProductDetail(true);
     try {
       const fullProduct = await catalogModel.getProduct(productId);
@@ -621,11 +784,44 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }
 
   async function loadProductReviews(productId) {
+    const requestedProductId = String(productId || '');
+    if (!requestedProductId) return;
+    const loadSequence = productReviewLoadSequenceRef.current + 1;
+    productReviewLoadSequenceRef.current = loadSequence;
+    if (productReviewsLoadedForRef.current !== requestedProductId) setProductReviews([]);
+    if (activeProductIdRef.current === requestedProductId) {
+      setProductReviewsLoading(true);
+      setProductReviewsLoadError('');
+    }
+
     try {
-      setProductReviews(await reviewModel.listProduct(productId));
+      const nextReviews = await reviewModel.listProduct(requestedProductId);
+      if (
+        productReviewLoadSequenceRef.current === loadSequence
+        && activeProductIdRef.current === requestedProductId
+      ) {
+        productReviewsLoadedForRef.current = requestedProductId;
+        setProductReviews(nextReviews);
+        setProductReviewsLoadedFor(requestedProductId);
+      }
     } catch (error) {
-      setNotice(error.message);
-      setProductReviews([]);
+      if (
+        productReviewLoadSequenceRef.current === loadSequence
+        && activeProductIdRef.current === requestedProductId
+      ) {
+        productReviewsLoadedForRef.current = '';
+        setNotice(error.message);
+        setProductReviews([]);
+        setProductReviewsLoadedFor('');
+        setProductReviewsLoadError('No se pudieron cargar las opiniones. Recarga el producto para volver a intentarlo.');
+      }
+    } finally {
+      if (
+        productReviewLoadSequenceRef.current === loadSequence
+        && activeProductIdRef.current === requestedProductId
+      ) {
+        setProductReviewsLoading(false);
+      }
     }
   }
 
@@ -817,6 +1013,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   const updateReviewForm = (field, value) => {
     setReviewForm((current) => ({ ...current, [field]: value }));
+    setProductReviewErrors((current) => ({
+      ...current,
+      [field]: undefined,
+      submit: undefined,
+    }));
+    setProductReviewFeedback('');
+    setProductReviewFocusTarget(null);
   };
 
   const updateAccountReviewForm = (field, value) => {
@@ -825,26 +1028,96 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   async function submitProductReview(event) {
     event.preventDefault();
-    const productId = selectedProduct?._id || selectedProduct?.id;
+    const productId = getProductId(selectedProduct);
     if (!session) {
       setNotice('Entra en tu cuenta para dejar una opinión.');
       setView('account');
       return;
     }
     if (!productId) return;
+    if (productReviewsLoading || productReviewsLoadedForRef.current !== productId) {
+      setProductReviewErrors({
+        submit: 'Espera a que comprobemos si ya existe una opinión tuya para este producto.',
+      });
+      focusProductReviewField('submit');
+      return;
+    }
 
-    setBusy(true);
+    const { errors, normalized } = validateReviewForm(reviewForm);
+    if (Object.keys(errors).length) {
+      setProductReviewErrors(errors);
+      setProductReviewFeedback('');
+      focusProductReviewField(['rating', 'title', 'comment'].find((field) => errors[field]));
+      return;
+    }
+
+    const reviewToUpdate = productReviews.find((review) => isReviewOwnedBySession(review, session));
+    const reviewId = getReviewId(reviewToUpdate);
+    const ownerKey = getSessionOwnerKey(session);
+    const submissionKey = ownerKey + '|' + productId + '|' + (reviewId || 'create');
+    if (productReviewSubmittingKeysRef.current.has(submissionKey)) return;
+
+    productReviewSubmittingKeysRef.current.add(submissionKey);
+    setProductReviewSubmitting(true);
+    setProductReviewErrors({});
+    setProductReviewFeedback('');
+    setProductReviewFocusTarget(null);
     try {
-      await reviewModel.create(request, productId, reviewForm);
-      setReviewForm({ ...emptyReviewForm });
-      await loadProductReviews(productId);
-      await loadMyReviews();
-      await loadAdminReviews();
-      setNotice('Opinión guardada correctamente.');
+      const savedReview = reviewId
+        ? await reviewModel.update(request, reviewId, normalized)
+        : await reviewModel.create(request, productId, normalized);
+
+      if (
+        getSessionOwnerKey(activeSessionRef.current) !== ownerKey
+        || activeProductIdRef.current !== productId
+      ) return;
+
+      if (
+        getReviewProductId(savedReview) !== productId
+        || !isReviewOwnedBySession(savedReview, session)
+      ) {
+        const error = new Error('La opinión confirmada no corresponde al contexto actual.');
+        error.code = 'INVALID_REVIEW_CONTEXT';
+        throw error;
+      }
+
+      setProductReviews((current) => replaceReviewById(current, savedReview));
+      setMyReviews((current) => replaceReviewById(current, savedReview));
+      if (session.user?.role === 'admin') {
+        setAdminReviews((current) => replaceReviewById(current, savedReview));
+      }
+      setReviewForm({
+        rating: Number(savedReview.rating),
+        title: savedReview.title || '',
+        comment: savedReview.comment || '',
+      });
+      const feedback = reviewId
+        ? 'Opinión actualizada correctamente.'
+        : 'Opinión publicada correctamente.';
+      setProductReviewFeedback(feedback);
+      setNotice(feedback);
     } catch (error) {
-      setNotice(error.message);
+      if (
+        getSessionOwnerKey(activeSessionRef.current) === ownerKey
+        && activeProductIdRef.current === productId
+      ) {
+        const message = getProductReviewSubmitError(error);
+        setProductReviewErrors({ submit: message });
+        setProductReviewFeedback('');
+        focusProductReviewField('submit');
+        setNotice('No se pudo guardar la opinión. Revisa el mensaje del formulario.');
+      }
     } finally {
-      setBusy(false);
+      productReviewSubmittingKeysRef.current.delete(submissionKey);
+      if (
+        getSessionOwnerKey(activeSessionRef.current) === ownerKey
+        && activeProductIdRef.current === productId
+      ) {
+        const activePrefix = ownerKey + '|' + productId + '|';
+        setProductReviewSubmitting(
+          [...productReviewSubmittingKeysRef.current].some((key) => key.startsWith(activePrefix)),
+        );
+      }
     }
   }
 
@@ -1746,7 +2019,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       pagination,
       paymentForm,
       productForm,
+      productReviewErrors,
+      productReviewFeedback,
+      productReviewFocusTarget,
+      productReviewSubmitting,
       productReviews,
+      productReviewsLoadedFor,
+      productReviewsLoadError,
+      productReviewsLoading,
       products,
       reviewForm,
       reservedBySku,

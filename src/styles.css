@@ -2900,6 +2900,39 @@ main {
   padding: 18px;
 }
 
+.review-form [aria-invalid="true"] {
+  border-color: #9f2c1f;
+  box-shadow: 0 0 0 3px rgba(159, 44, 31, 0.12);
+}
+
+.review-feedback,
+.review-operation-status {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.review-feedback.error {
+  border: 1px solid rgba(159, 44, 31, 0.32);
+  background: #fff4f1;
+  color: #7d241b;
+  font-weight: 750;
+}
+
+.review-feedback.success,
+.review-operation-status {
+  border: 1px solid rgba(49, 92, 69, 0.2);
+  background: #eef1e7;
+  color: #315c45;
+  font-weight: 800;
+}
+
+.review-feedback:focus-visible {
+  outline: 3px solid rgba(159, 44, 31, 0.3);
+  outline-offset: 2px;
+}
+
 .reviews-list,
 .account-review-list {
   display: grid;
@@ -2971,6 +3004,7 @@ main {
   .brand-hero,
   .catalog-layout,
   .product-detail-layout,
+  .reviews-layout,
   .cart-drawer-panel,
   .identity-panel {
     grid-template-columns: 1fr;
@@ -3011,6 +3045,15 @@ main {
 
   .section-nav {
     padding: 0 12px 10px;
+  }
+
+  .product-tabs {
+    gap: 18px;
+    overflow-x: auto;
+  }
+
+  .product-tabs button {
+    flex: 0 0 auto;
   }
 
   main {
