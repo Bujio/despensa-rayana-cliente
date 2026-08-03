@@ -29,6 +29,7 @@ export function ProductView({ state, actions }) {
     productReviewErrors,
     productReviewFeedback,
     productReviewFocusTarget,
+    productReviewSessionAlert,
     productReviewSubmitting,
     productReviews,
     productReviewsLoadedFor,
@@ -61,6 +62,14 @@ export function ProductView({ state, actions }) {
     });
     return () => window.cancelAnimationFrame(focusFrame);
   }, [productReviewFocusTarget]);
+
+  useEffect(() => {
+    if (!productReviewSessionAlert?.version) return undefined;
+    const focusFrame = window.requestAnimationFrame(() => {
+      document.getElementById('product-review-session-alert')?.focus();
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [productReviewSessionAlert]);
 
   if (!selectedProduct) {
     return (
@@ -227,6 +236,17 @@ export function ProductView({ state, actions }) {
                 {productReviewsReady && ownReview ? 'Actualiza tu opinión' : 'Añade tu opinión'}
               </div>
               {!session && <p className="soft-note">Entra en tu cuenta para escribir una valoración.</p>}
+              {productReviewSessionAlert && (
+                <p
+                  aria-live="assertive"
+                  className="review-feedback error"
+                  id="product-review-session-alert"
+                  role="alert"
+                  tabIndex="-1"
+                >
+                  {productReviewSessionAlert.message}
+                </p>
+              )}
               {productReviewsLoading && (
                 <p className="review-operation-status" role="status">
                   Comprobando tus opiniones para este producto…

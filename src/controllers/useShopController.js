@@ -203,6 +203,8 @@ const getReviewUserId = (review) => String(
   review?.user?._id || review?.user?.id || review?.user || '',
 );
 
+const PRODUCT_REVIEW_SESSION_EXPIRED_MESSAGE = 'Tu sesión ha caducado y la opinión no se ha guardado. Inicia sesión nuevamente para continuar.';
+
 const isReviewOwnedBySession = (review, session) => Boolean(
   getReviewUserId(review)
   && getReviewUserId(review) === String(session?.user?._id || session?.user?.id || ''),
@@ -241,6 +243,9 @@ const replaceReviewById = (reviews, review) => {
 
 const getProductReviewSubmitError = (error) => {
   const message = String(error?.message || '').trim().toLowerCase();
+  if (error?.code === 'SESSION_EXPIRED') {
+    return PRODUCT_REVIEW_SESSION_EXPIRED_MESSAGE;
+  }
   if (error?.code === 'INVALID_REVIEW_CONFIRMATION' || error?.code === 'INVALID_REVIEW_CONTEXT') {
     return 'El servidor no confirmó la opinión de forma fiable. Recarga el producto antes de reintentar.';
   }
@@ -248,7 +253,7 @@ const getProductReviewSubmitError = (error) => {
     return 'Se perdió la conexión. Conservamos tu texto; comprueba la opinión antes de volver a enviarla.';
   }
   if (message.includes('no token') || message.includes('invalid token') || message.includes('unauthorized')) {
-    return 'La sesión ha caducado. Inicia sesión de nuevo; el texto permanece en este formulario mientras no cambies de usuario o producto.';
+    return PRODUCT_REVIEW_SESSION_EXPIRED_MESSAGE;
   }
   if (message.includes('forbidden')) {
     return 'No tienes permiso para modificar esta opinión.';
@@ -387,6 +392,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [reviewForm, setReviewForm] = useState(() => ({ ...emptyReviewForm }));
   const [productReviewErrors, setProductReviewErrors] = useState({});
   const [productReviewFeedback, setProductReviewFeedback] = useState('');
+  const [productReviewSessionAlert, setProductReviewSessionAlert] = useState(null);
   const [productReviewFocusTarget, setProductReviewFocusTarget] = useState(null);
   const [productReviewSubmitting, setProductReviewSubmitting] = useState(false);
   const [productReviewsLoading, setProductReviewsLoading] = useState(false);
@@ -507,6 +513,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setReviewForm({ ...emptyReviewForm });
       setProductReviewErrors({});
       setProductReviewFeedback('');
+      setProductReviewSessionAlert(null);
       setProductReviewFocusTarget(null);
       setProductReviewSubmitting(false);
       productReviewFormContextRef.current = '';
@@ -1097,6 +1104,18 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setProductReviewFeedback(feedback);
       setNotice(feedback);
     } catch (error) {
+      if (
+        error?.code === 'SESSION_EXPIRED'
+        && !getSessionOwnerKey(activeSessionRef.current)
+        && activeProductIdRef.current === productId
+      ) {
+        setProductReviewSessionAlert((current) => ({
+          message: PRODUCT_REVIEW_SESSION_EXPIRED_MESSAGE,
+          version: Number(current?.version || 0) + 1,
+        }));
+        setNotice('');
+        return;
+      }
       if (
         getSessionOwnerKey(activeSessionRef.current) === ownerKey
         && activeProductIdRef.current === productId
@@ -2021,6 +2040,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       productForm,
       productReviewErrors,
       productReviewFeedback,
+      productReviewSessionAlert,
       productReviewFocusTarget,
       productReviewSubmitting,
       productReviews,

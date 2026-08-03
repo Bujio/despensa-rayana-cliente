@@ -48,9 +48,18 @@ function createStaleSessionError() {
   return error;
 }
 
+function createApiError(response, payload, code = 'HTTP_ERROR') {
+  const error = new Error(getErrorMessage(payload));
+  error.name = 'ApiError';
+  error.code = code;
+  error.status = response.status;
+  return error;
+}
+
 export async function apiRequest(path, options = {}, session = sessionModel.get(), onSessionChange) {
   const headers = new Headers(options.headers || {});
   const hasFormData = options.body instanceof FormData;
+  let sessionExpired = false;
 
   if (!hasFormData && options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -69,11 +78,16 @@ export async function apiRequest(path, options = {}, session = sessionModel.get(
     const refreshed = session.refreshToken ? await refreshSession(session) : null;
     if (!applySessionChange(refreshed, onSessionChange)) throw createStaleSessionError();
     if (refreshed) return apiRequest(path, options, refreshed, onSessionChange);
+    sessionExpired = true;
   }
 
   const payload = await readJson(response);
   if (!response.ok) {
-    throw new Error(getErrorMessage(payload));
+    throw createApiError(
+      response,
+      payload,
+      sessionExpired ? 'SESSION_EXPIRED' : 'HTTP_ERROR',
+    );
   }
 
   return payload;
