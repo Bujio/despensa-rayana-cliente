@@ -1,8 +1,26 @@
 import { sessionModel } from './sessionModel.js';
 
 const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:3000/api';
-const refreshRequestsByToken = new Map();
+const refreshRequestsByGeneration = new Map();
 const SESSION_REFRESH_UNAVAILABLE_MESSAGE = 'No se ha podido comprobar tu sesión temporalmente. La operación no se ha enviado. Inténtalo de nuevo.';
+let sessionGenerationSequence = 0;
+let activeSessionGeneration = null;
+
+export function beginSessionGeneration() {
+  sessionGenerationSequence += 1;
+  activeSessionGeneration = sessionGenerationSequence;
+  return activeSessionGeneration;
+}
+
+export function invalidateSessionGeneration() {
+  sessionGenerationSequence += 1;
+  activeSessionGeneration = null;
+  return sessionGenerationSequence;
+}
+
+export function isSessionGenerationActive(generation) {
+  return Number.isSafeInteger(generation) && activeSessionGeneration === generation;
+}
 
 async function readJson(response) {
   const text = await response.text();
@@ -54,7 +72,19 @@ function createSessionRefreshUnavailableError(sourceError) {
   return error;
 }
 
-async function performSessionRefresh(session) {
+function createStaleSessionError() {
+  const error = new Error('La sesión cambió durante la solicitud.');
+  error.code = 'STALE_SESSION';
+  return error;
+}
+
+function assertSessionContextCurrent(sessionContext) {
+  if (sessionContext?.isCurrent && sessionContext.isCurrent(sessionContext) !== true) {
+    throw createStaleSessionError();
+  }
+}
+
+async function performSessionRefresh(session, sessionContext) {
   try {
     const next = await apiRequest(
       '/auth/refresh',
@@ -64,6 +94,7 @@ async function performSessionRefresh(session) {
       },
       null,
     );
+    assertSessionContextCurrent(sessionContext);
     if (!next?.accessToken || !next?.refreshToken) {
       const invalidResponse = new Error('Invalid session refresh response');
       invalidResponse.code = 'INVALID_SESSION_REFRESH_RESPONSE';
@@ -74,6 +105,7 @@ async function performSessionRefresh(session) {
       session: { ...session, ...next, user: next.user || session.user },
     };
   } catch (error) {
+    assertSessionContextCurrent(sessionContext);
     if (error?.status === 401 || error?.status === 403) {
       return {
         kind: 'expired',
@@ -87,7 +119,8 @@ async function performSessionRefresh(session) {
   }
 }
 
-async function refreshSession(session) {
+async function refreshSession(session, sessionContext) {
+  assertSessionContextCurrent(sessionContext);
   const refreshToken = session?.refreshToken;
   if (!refreshToken) {
     return {
@@ -96,32 +129,34 @@ async function refreshSession(session) {
     };
   }
 
-  let refreshRequest = refreshRequestsByToken.get(refreshToken);
+  const refreshKey = Number.isSafeInteger(sessionContext?.generation)
+    ? sessionContext.generation
+    : Symbol('unscoped-session-refresh');
+  let refreshRequest = refreshRequestsByGeneration.get(refreshKey);
   if (!refreshRequest) {
-    refreshRequest = performSessionRefresh(session);
-    refreshRequestsByToken.set(refreshToken, refreshRequest);
+    refreshRequest = performSessionRefresh(session, sessionContext);
+    refreshRequestsByGeneration.set(refreshKey, refreshRequest);
   }
 
   try {
-    return await refreshRequest;
+    const result = await refreshRequest;
+    assertSessionContextCurrent(sessionContext);
+    return result;
   } finally {
-    if (refreshRequestsByToken.get(refreshToken) === refreshRequest) {
-      refreshRequestsByToken.delete(refreshToken);
+    if (refreshRequestsByGeneration.get(refreshKey) === refreshRequest) {
+      refreshRequestsByGeneration.delete(refreshKey);
     }
   }
 }
 
-function applySessionChange(nextSession, onSessionChange) {
-  if (onSessionChange) return onSessionChange(nextSession) !== false;
+function applySessionChange(nextSession, sessionContext) {
+  assertSessionContextCurrent(sessionContext);
+  if (sessionContext?.onSessionChange) {
+    return sessionContext.onSessionChange(nextSession, sessionContext) !== false;
+  }
   if (nextSession) sessionModel.save(nextSession);
   else sessionModel.clear();
   return true;
-}
-
-function createStaleSessionError() {
-  const error = new Error('La sesión cambió durante la solicitud.');
-  error.code = 'STALE_SESSION';
-  return error;
 }
 
 function createApiError(response, payload, code = 'HTTP_ERROR') {
@@ -132,7 +167,8 @@ function createApiError(response, payload, code = 'HTTP_ERROR') {
   return error;
 }
 
-async function performApiRequest(path, options, session, onSessionChange, refreshAttempted) {
+async function performApiRequest(path, options, session, sessionContext, refreshAttempted) {
+  assertSessionContextCurrent(sessionContext);
   const headers = new Headers(options.headers || {});
   const hasFormData = options.body instanceof FormData;
 
@@ -144,30 +180,40 @@ async function performApiRequest(path, options, session, onSessionChange, refres
     headers.set('Authorization', 'Bearer ' + session.accessToken);
   }
 
-  const response = await fetch(API_URL + path, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(API_URL + path, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    assertSessionContextCurrent(sessionContext);
+    throw error;
+  }
+  assertSessionContextCurrent(sessionContext);
 
   if (response.status === 401 && session && path !== '/auth/refresh') {
     if (refreshAttempted) {
-      if (!applySessionChange(null, onSessionChange)) throw createStaleSessionError();
+      if (!applySessionChange(null, sessionContext)) throw createStaleSessionError();
       throw createSessionExpiredError(response.status, 'RETRIED_REQUEST_UNAUTHORIZED');
     }
 
-    const refreshResult = await refreshSession(session);
+    const refreshResult = await refreshSession(session, sessionContext);
+    assertSessionContextCurrent(sessionContext);
     if (refreshResult.kind === 'unavailable') throw refreshResult.error;
     if (refreshResult.kind === 'expired') {
-      if (!applySessionChange(null, onSessionChange)) throw createStaleSessionError();
+      if (!applySessionChange(null, sessionContext)) throw createStaleSessionError();
       throw refreshResult.error;
     }
-    if (!applySessionChange(refreshResult.session, onSessionChange)) {
+    if (!applySessionChange(refreshResult.session, sessionContext)) {
       throw createStaleSessionError();
     }
-    return performApiRequest(path, options, refreshResult.session, onSessionChange, true);
+    assertSessionContextCurrent(sessionContext);
+    return performApiRequest(path, options, refreshResult.session, sessionContext, true);
   }
 
   const payload = await readJson(response);
+  assertSessionContextCurrent(sessionContext);
   if (!response.ok) {
     throw createApiError(response, payload);
   }
@@ -175,8 +221,17 @@ async function performApiRequest(path, options, session, onSessionChange, refres
   return payload;
 }
 
-export function apiRequest(path, options = {}, session = sessionModel.get(), onSessionChange) {
-  return performApiRequest(path, options, session, onSessionChange, false);
+export function apiRequest(path, options = {}, session = sessionModel.get(), sessionLifecycle) {
+  const lifecycle = typeof sessionLifecycle === 'function'
+    ? { onSessionChange: sessionLifecycle }
+    : sessionLifecycle;
+  const sessionContext = session && lifecycle ? Object.freeze({
+    generation: lifecycle.generation,
+    ownerKey: lifecycle.ownerKey,
+    isCurrent: lifecycle.isCurrent,
+    onSessionChange: lifecycle.onSessionChange,
+  }) : null;
+  return performApiRequest(path, options, session, sessionContext, false);
 }
 
 export { API_URL };

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiRequest } from '../models/apiClient.js';
+import {
+  apiRequest,
+  beginSessionGeneration,
+  invalidateSessionGeneration,
+  isSessionGenerationActive,
+} from '../models/apiClient.js';
 import { adminModel } from '../models/adminModel.js';
 import { authModel } from '../models/authModel.js';
 import { cartModel } from '../models/cartModel.js';
@@ -387,6 +392,7 @@ const hasClientSideFilters = (filters) => Boolean(
 
 export function useShopController({ navigate, routeCategorySlug = '', routePath = '/', routeProductId = '', routeView = 'home' } = {}) {
   const [session, setSession] = useState(() => sessionModel.get());
+  const [sessionGeneration, setSessionGeneration] = useState(null);
   const [products, setProducts] = useState([]);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -441,9 +447,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [checkoutFocusTarget, setCheckoutFocusTarget] = useState(null);
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const checkoutSubmittingRef = useRef(false);
+  const checkoutSubmissionContextRef = useRef(null);
   const preserveCheckoutDraftRef = useRef(false);
   const skipCheckoutSessionReloadRef = useRef(false);
   const activeSessionRef = useRef(session);
+  const activeSessionGenerationRef = useRef(sessionGeneration);
   const cancellingOrderIdsRef = useRef(new Set());
   const skipOrderSessionReloadRef = useRef(false);
   const activeProductIdRef = useRef(getProductId(selectedProduct));
@@ -451,6 +459,21 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const productReviewsLoadedForRef = useRef('');
   const productReviewFormContextRef = useRef('');
   const productReviewSubmittingKeysRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!activeSessionRef.current) {
+      invalidateSessionGeneration();
+    } else {
+      const initialGeneration = beginSessionGeneration();
+      activeSessionGenerationRef.current = initialGeneration;
+      setSessionGeneration(initialGeneration);
+    }
+    return () => {
+      const activeGeneration = activeSessionGenerationRef.current;
+      if (isSessionGenerationActive(activeGeneration)) invalidateSessionGeneration();
+      activeSessionGenerationRef.current = null;
+    };
+  }, []);
 
   const cartItems = cart?.items || [];
   const cartTotal = useMemo(
@@ -488,6 +511,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   );
   const selectedProductId = getProductId(selectedProduct);
   const productReviewOwnerKey = getSessionOwnerKey(session);
+  const productReviewSessionKey = productReviewOwnerKey && sessionGeneration
+    ? productReviewOwnerKey + '|generation:' + sessionGeneration
+    : '';
   const ownProductReview = productReviews.find((review) => isReviewOwnedBySession(review, session));
   const ownProductReviewId = getReviewId(ownProductReview);
 
@@ -498,18 +524,43 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     });
   };
 
-  const applySession = (nextSession) => {
+  const isSessionContextCurrent = (sessionContext) => Boolean(
+    sessionContext
+    && sessionContext.generation === activeSessionGenerationRef.current
+    && sessionContext.ownerKey === getSessionOwnerKey(activeSessionRef.current)
+    && isSessionGenerationActive(sessionContext.generation)
+  );
+
+  const captureSessionContext = () => {
+    const currentSession = activeSessionRef.current;
+    const generation = activeSessionGenerationRef.current;
+    const ownerKey = getSessionOwnerKey(currentSession);
+    if (!currentSession || !ownerKey || !Number.isSafeInteger(generation)) return null;
+    return Object.freeze({ generation, ownerKey });
+  };
+
+  const applySession = (nextSession, nextGeneration) => {
     const currentOwnerKey = getSessionOwnerKey(activeSessionRef.current);
     const nextOwnerKey = getSessionOwnerKey(nextSession);
-    const ownerChanged = currentOwnerKey !== nextOwnerKey;
-    if (checkoutSubmittingRef.current) {
+    const sessionChanged = (
+      currentOwnerKey !== nextOwnerKey
+      || activeSessionGenerationRef.current !== nextGeneration
+    );
+    if (!sessionChanged && checkoutSubmittingRef.current) {
       preserveCheckoutDraftRef.current = true;
       skipCheckoutSessionReloadRef.current = true;
     }
-    if (cancellingOrderIdsRef.current.size) {
+    if (!sessionChanged && cancellingOrderIdsRef.current.size) {
       if (nextOwnerKey && currentOwnerKey === nextOwnerKey) skipOrderSessionReloadRef.current = true;
     }
-    if (ownerChanged) {
+    if (sessionChanged) {
+      checkoutSubmittingRef.current = false;
+      checkoutSubmissionContextRef.current = null;
+      preserveCheckoutDraftRef.current = false;
+      skipCheckoutSessionReloadRef.current = false;
+      cancellingOrderIdsRef.current.clear();
+      skipOrderSessionReloadRef.current = false;
+      productReviewSubmittingKeysRef.current.clear();
       setCart(null);
       setOrders([]);
       setMyReviews([]);
@@ -531,21 +582,52 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setSelectedAdminOrderId('');
       setSelectedAdminProductId('');
       setSelectedAdminCategoryId('');
+      setCheckoutSubmitting(false);
+      setBusy(false);
     }
     activeSessionRef.current = nextSession;
+    activeSessionGenerationRef.current = nextGeneration;
     setSession(nextSession);
+    setSessionGeneration(nextGeneration);
     if (nextSession) sessionModel.save(nextSession);
     else sessionModel.clear();
   };
 
-  const request = (path, options) => {
-    const requestOwnerKey = getSessionOwnerKey(session);
-    return apiRequest(path, options, session, (nextSession) => {
-      if (getSessionOwnerKey(activeSessionRef.current) !== requestOwnerKey) return false;
-      applySession(nextSession);
-      return true;
+  const startLogicalSession = (nextSession) => {
+    const nextGeneration = beginSessionGeneration();
+    applySession(nextSession, nextGeneration);
+    return nextGeneration;
+  };
+
+  const endLogicalSession = (expectedContext = null) => {
+    if (expectedContext && !isSessionContextCurrent(expectedContext)) return false;
+    invalidateSessionGeneration();
+    applySession(null, null);
+    return true;
+  };
+
+  const requestWithSessionContext = (sessionContext, path, options) => {
+    if (!sessionContext) return apiRequest(path, options, null);
+    const requestSession = activeSessionRef.current;
+    return apiRequest(path, options, requestSession, {
+      generation: sessionContext.generation,
+      ownerKey: sessionContext.ownerKey,
+      isCurrent: () => isSessionContextCurrent(sessionContext),
+      onSessionChange: (nextSession) => {
+        if (!isSessionContextCurrent(sessionContext)) return false;
+        if (nextSession) {
+          if (getSessionOwnerKey(nextSession) !== sessionContext.ownerKey) return false;
+          applySession(nextSession, sessionContext.generation);
+        }
+        else endLogicalSession(sessionContext);
+        return true;
+      },
     });
   };
+
+  const createSessionRequest = (sessionContext) => (
+    (path, options) => requestWithSessionContext(sessionContext, path, options)
+  );
 
   const setView = (nextView, options = {}) => {
     const nextPath = buildRoute(nextView, {
@@ -572,7 +654,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setProductReviewFeedback('');
     setProductReviewFocusTarget(null);
     setProductReviewSubmitting(false);
-  }, [selectedProductId, productReviewOwnerKey]);
+  }, [selectedProductId, productReviewSessionKey]);
 
   useEffect(() => {
     if (
@@ -582,7 +664,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       || productReviewsLoadedFor !== selectedProductId
     ) return;
 
-    const contextKey = selectedProductId + '|' + productReviewOwnerKey;
+    const contextKey = selectedProductId + '|' + productReviewSessionKey;
     if (productReviewFormContextRef.current === contextKey) return;
 
     productReviewFormContextRef.current = contextKey;
@@ -598,6 +680,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     ownProductReview,
     ownProductReviewId,
     productReviewOwnerKey,
+    productReviewSessionKey,
     productReviewsLoadedFor,
     productReviewsLoading,
     selectedProductId,
@@ -641,6 +724,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }, [routeView, routeProductId]);
 
   useEffect(() => {
+    if (session && !sessionGeneration) return;
     if (session) {
       const preserveCheckoutDraft = checkoutSubmittingRef.current || preserveCheckoutDraftRef.current;
       const skipCheckoutSessionReload = skipCheckoutSessionReloadRef.current;
@@ -692,7 +776,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         checkoutSubmittingRef.current = false;
       }
     }
-  }, [session?.accessToken]);
+  }, [session?.accessToken, sessionGeneration]);
 
   async function loadCategories() {
     try {
@@ -836,75 +920,78 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
-  async function loadMyReviews() {
-    if (!session?.accessToken) return;
-    const ownerKey = getSessionOwnerKey(session);
+  async function loadMyReviews(sessionContext = captureSessionContext()) {
+    if (!sessionContext) return;
+    const sessionRequest = createSessionRequest(sessionContext);
     try {
-      const nextReviews = await reviewModel.listMine(request);
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setMyReviews(nextReviews);
+      const nextReviews = await reviewModel.listMine(sessionRequest);
+      if (isSessionContextCurrent(sessionContext)) setMyReviews(nextReviews);
     } catch {
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setMyReviews([]);
+      if (isSessionContextCurrent(sessionContext)) setMyReviews([]);
     }
   }
 
-  async function loadAdminReviews() {
-    if (session?.user?.role !== 'admin') return;
-    const ownerKey = getSessionOwnerKey(session);
+  async function loadAdminReviews(sessionContext = captureSessionContext()) {
+    if (!sessionContext || activeSessionRef.current?.user?.role !== 'admin') return;
+    const sessionRequest = createSessionRequest(sessionContext);
     try {
-      const nextReviews = await reviewModel.listAll(request);
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setAdminReviews(nextReviews);
+      const nextReviews = await reviewModel.listAll(sessionRequest);
+      if (isSessionContextCurrent(sessionContext)) setAdminReviews(nextReviews);
     } catch {
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setAdminReviews([]);
+      if (isSessionContextCurrent(sessionContext)) setAdminReviews([]);
     }
   }
 
-  async function loadAdminProducts() {
-    const ownerKey = getSessionOwnerKey(session);
+  async function loadAdminProducts(sessionContext = captureSessionContext()) {
+    if (!sessionContext) return;
     try {
       const result = await catalogModel.listProducts({
         page: 1,
         filters: { ...emptyFilters, inStock: false },
         limit: 100,
       });
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setAdminProducts(result.products);
+      if (isSessionContextCurrent(sessionContext)) setAdminProducts(result.products);
     } catch (error) {
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setNotice(error.message);
+      if (isSessionContextCurrent(sessionContext)) setNotice(error.message);
     }
   }
 
-  async function loadAdminUsers() {
-    const ownerKey = getSessionOwnerKey(session);
+  async function loadAdminUsers(sessionContext = captureSessionContext()) {
+    if (!sessionContext) return;
+    const sessionRequest = createSessionRequest(sessionContext);
     try {
-      const nextUsers = await adminModel.listUsers(request);
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setAdminUsers(nextUsers);
+      const nextUsers = await adminModel.listUsers(sessionRequest);
+      if (isSessionContextCurrent(sessionContext)) setAdminUsers(nextUsers);
     } catch (error) {
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setNotice(error.message);
+      if (isSessionContextCurrent(sessionContext)) setNotice(error.message);
     }
   }
 
-  async function loadCart() {
-    const ownerKey = getSessionOwnerKey(session);
+  async function loadCart(sessionContext = captureSessionContext()) {
+    if (!sessionContext) return;
+    const sessionRequest = createSessionRequest(sessionContext);
     try {
-      const nextCart = await cartModel.get(request);
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setCart(nextCart);
+      const nextCart = await cartModel.get(sessionRequest);
+      if (isSessionContextCurrent(sessionContext)) setCart(nextCart);
     } catch (error) {
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setNotice(error.message);
+      if (isSessionContextCurrent(sessionContext)) setNotice(error.message);
     }
   }
 
-  async function loadOrders() {
-    const ownerKey = getSessionOwnerKey(session);
-    if (!ownerKey) {
+  async function loadOrders(sessionContext = captureSessionContext()) {
+    if (!sessionContext) {
       setOrders([]);
       return;
     }
+    const sessionRequest = createSessionRequest(sessionContext);
+    const requestSession = activeSessionRef.current;
     try {
-      const nextOrders = session?.user?.role === 'admin'
-        ? await orderModel.listAll(request)
-        : await orderModel.listByEmail(request, session?.user?.email);
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setOrders(nextOrders);
+      const nextOrders = requestSession?.user?.role === 'admin'
+        ? await orderModel.listAll(sessionRequest)
+        : await orderModel.listByEmail(sessionRequest, requestSession?.user?.email);
+      if (isSessionContextCurrent(sessionContext)) setOrders(nextOrders);
     } catch {
-      if (getSessionOwnerKey(activeSessionRef.current) === ownerKey) setOrders([]);
+      if (isSessionContextCurrent(sessionContext)) setOrders([]);
     }
   }
 
@@ -915,7 +1002,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     try {
       if (authMode === 'login') {
         const next = await authModel.login(authForm.email, authForm.password);
-        applySession(next);
+        startLogicalSession(next);
         setView(next.user?.role === 'admin' ? 'admin' : 'catalog');
         setNotice('Bienvenido, ' + (next.user?.name || 'cliente'));
       } else {
@@ -942,21 +1029,20 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }
 
   async function handleLogout() {
-    setBusy(true);
+    const refreshToken = activeSessionRef.current?.refreshToken;
+    endLogicalSession();
+    setView('catalog');
+    setNotice('Sesión cerrada');
     try {
-      await authModel.logout(session?.refreshToken);
+      await authModel.logout(refreshToken);
     } catch {
       // The local session can still be closed even if the server call fails.
-    } finally {
-      applySession(null);
-      setView('catalog');
-      setBusy(false);
-      setNotice('Sesión cerrada');
     }
   }
 
   async function addToCart(product, quantity = 1) {
-    if (!session) {
+    const operationContext = captureSessionContext();
+    if (!operationContext) {
       setView('account');
       setNotice('Inicia sesión para añadir productos al carrito.');
       return;
@@ -965,50 +1051,68 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setNotice('No quedan más unidades disponibles de este producto.');
       return;
     }
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      setCart(await cartModel.addItem(request, product, quantity));
-      setNotice(product.name + ' añadido al carrito');
+      const nextCart = await cartModel.addItem(operationRequest, product, quantity);
+      if (isSessionContextCurrent(operationContext)) {
+        setCart(nextCart);
+        setNotice(product.name + ' añadido al carrito');
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
   async function updateCartItem(item, quantity) {
     if (quantity < 1) return removeCartItem(item);
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      setCart(await cartModel.updateItem(request, item, quantity));
+      const nextCart = await cartModel.updateItem(operationRequest, item, quantity);
+      if (isSessionContextCurrent(operationContext)) setCart(nextCart);
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
   async function removeCartItem(item) {
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      setCart(await cartModel.removeItem(request, item));
+      const nextCart = await cartModel.removeItem(operationRequest, item);
+      if (isSessionContextCurrent(operationContext)) setCart(nextCart);
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
   async function clearCart() {
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      setCart(await cartModel.clear(request));
-      setCheckoutStep('items');
-      setCheckoutErrors({});
+      const nextCart = await cartModel.clear(operationRequest);
+      if (isSessionContextCurrent(operationContext)) {
+        setCart(nextCart);
+        setCheckoutStep('items');
+        setCheckoutErrors({});
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1040,7 +1144,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   async function submitProductReview(event) {
     event.preventDefault();
     const productId = getProductId(selectedProduct);
-    if (!session) {
+    const submissionContext = captureSessionContext();
+    if (!submissionContext) {
       setNotice('Entra en tu cuenta para dejar una opinión.');
       setView('account');
       return;
@@ -1062,12 +1167,18 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
-    const reviewToUpdate = productReviews.find((review) => isReviewOwnedBySession(review, session));
+    const submissionSession = activeSessionRef.current;
+    const reviewToUpdate = productReviews.find((review) => (
+      isReviewOwnedBySession(review, submissionSession)
+    ));
     const reviewId = getReviewId(reviewToUpdate);
-    const ownerKey = getSessionOwnerKey(session);
-    const submissionKey = ownerKey + '|' + productId + '|' + (reviewId || 'create');
+    const submissionKey = 'generation:' + submissionContext.generation
+      + '|' + submissionContext.ownerKey
+      + '|' + productId
+      + '|' + (reviewId || 'create');
     if (productReviewSubmittingKeysRef.current.has(submissionKey)) return;
 
+    const submissionRequest = createSessionRequest(submissionContext);
     productReviewSubmittingKeysRef.current.add(submissionKey);
     setProductReviewSubmitting(true);
     setProductReviewErrors({});
@@ -1075,17 +1186,17 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setProductReviewFocusTarget(null);
     try {
       const savedReview = reviewId
-        ? await reviewModel.update(request, reviewId, normalized)
-        : await reviewModel.create(request, productId, normalized);
+        ? await reviewModel.update(submissionRequest, reviewId, normalized)
+        : await reviewModel.create(submissionRequest, productId, normalized);
 
       if (
-        getSessionOwnerKey(activeSessionRef.current) !== ownerKey
+        !isSessionContextCurrent(submissionContext)
         || activeProductIdRef.current !== productId
       ) return;
 
       if (
         getReviewProductId(savedReview) !== productId
-        || !isReviewOwnedBySession(savedReview, session)
+        || !isReviewOwnedBySession(savedReview, submissionSession)
       ) {
         const error = new Error('La opinión confirmada no corresponde al contexto actual.');
         error.code = 'INVALID_REVIEW_CONTEXT';
@@ -1094,7 +1205,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
       setProductReviews((current) => replaceReviewById(current, savedReview));
       setMyReviews((current) => replaceReviewById(current, savedReview));
-      if (session.user?.role === 'admin') {
+      if (submissionSession.user?.role === 'admin') {
         setAdminReviews((current) => replaceReviewById(current, savedReview));
       }
       setReviewForm({
@@ -1110,7 +1221,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     } catch (error) {
       if (
         error?.code === 'SESSION_EXPIRED'
-        && !getSessionOwnerKey(activeSessionRef.current)
+        && !activeSessionGenerationRef.current
+        && !activeSessionRef.current
         && activeProductIdRef.current === productId
       ) {
         setProductReviewSessionAlert((current) => ({
@@ -1121,7 +1233,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         return;
       }
       if (
-        getSessionOwnerKey(activeSessionRef.current) === ownerKey
+        isSessionContextCurrent(submissionContext)
         && activeProductIdRef.current === productId
       ) {
         const message = getProductReviewSubmitError(error);
@@ -1133,10 +1245,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     } finally {
       productReviewSubmittingKeysRef.current.delete(submissionKey);
       if (
-        getSessionOwnerKey(activeSessionRef.current) === ownerKey
+        isSessionContextCurrent(submissionContext)
         && activeProductIdRef.current === productId
       ) {
-        const activePrefix = ownerKey + '|' + productId + '|';
+        const activePrefix = 'generation:' + submissionContext.generation
+          + '|' + submissionContext.ownerKey
+          + '|' + productId
+          + '|';
         setProductReviewSubmitting(
           [...productReviewSubmittingKeysRef.current].some((key) => key.startsWith(activePrefix)),
         );
@@ -1160,21 +1275,27 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      await reviewModel.update(request, selectedAccountReviewId, accountReviewForm);
+      await reviewModel.update(operationRequest, selectedAccountReviewId, accountReviewForm);
+      if (!isSessionContextCurrent(operationContext)) return;
       setSelectedAccountReviewId('');
       setAccountReviewForm({ ...emptyReviewForm });
-      await loadMyReviews();
-      await loadAdminReviews();
+      await loadMyReviews(operationContext);
+      await loadAdminReviews(operationContext);
       if (selectedProduct?._id || selectedProduct?.id) {
         await loadProductReviews(selectedProduct._id || selectedProduct.id);
       }
-      setNotice('Opinión actualizada correctamente.');
+      if (isSessionContextCurrent(operationContext)) {
+        setNotice('Opinión actualizada correctamente.');
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1182,23 +1303,29 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     const reviewId = review?._id || review?.id;
     if (!reviewId) return;
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      await reviewModel.delete(request, reviewId);
+      await reviewModel.delete(operationRequest, reviewId);
+      if (!isSessionContextCurrent(operationContext)) return;
       if (selectedAccountReviewId === reviewId) {
         setSelectedAccountReviewId('');
         setAccountReviewForm({ ...emptyReviewForm });
       }
-      await loadMyReviews();
-      await loadAdminReviews();
+      await loadMyReviews(operationContext);
+      await loadAdminReviews(operationContext);
       if (selectedProduct?._id || selectedProduct?.id) {
         await loadProductReviews(selectedProduct._id || selectedProduct.id);
       }
-      setNotice('Opinión eliminada correctamente.');
+      if (isSessionContextCurrent(operationContext)) {
+        setNotice('Opinión eliminada correctamente.');
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1239,7 +1366,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   async function createOrder(event) {
     event?.preventDefault();
-    if (checkoutSubmittingRef.current || !cartItems.length || !session?.user?.email) return;
+    const submissionContext = captureSessionContext();
+    if (
+      !submissionContext
+      || checkoutSubmittingRef.current
+      || !cartItems.length
+      || !activeSessionRef.current?.user?.email
+    ) return;
     const shippingErrors = validateShippingForm(shippingForm);
     const confirmationErrors = validateCheckoutConfirmation(paymentForm);
     if (Object.keys(shippingErrors).length) {
@@ -1262,16 +1395,20 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
 
     checkoutSubmittingRef.current = true;
+    checkoutSubmissionContextRef.current = submissionContext;
     setCheckoutSubmitting(true);
     setCheckoutErrors({});
     setCheckoutFocusTarget(null);
+    const submissionRequest = createSessionRequest(submissionContext);
+    const submissionSession = activeSessionRef.current;
     try {
       const createdOrder = await orderModel.createFromCart(
-        request,
-        session.user.email,
+        submissionRequest,
+        submissionSession.user.email,
         cartItems,
         shippingForm,
       );
+      if (!isSessionContextCurrent(submissionContext)) return;
       setCart((current) => ({ ...(current || {}), items: [] }));
       setOrders((current) => {
         const createdId = createdOrder?._id || createdOrder?.id;
@@ -1287,12 +1424,23 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setView('orders');
       setNotice('Pedido registrado. Permanece pendiente y el pago real todavía no está integrado.');
     } catch (error) {
-      setCheckoutErrors({ submit: getCheckoutSubmitError(error) });
-      setCheckoutFocusTarget({ field: 'submit' });
-      setNotice('No se pudo confirmar el pedido. Revisa el error mostrado en el checkout.');
+      if (
+        isSessionContextCurrent(submissionContext)
+        || (error?.code === 'SESSION_EXPIRED' && !activeSessionRef.current)
+      ) {
+        setCheckoutErrors({ submit: getCheckoutSubmitError(error) });
+        setCheckoutFocusTarget({ field: 'submit' });
+        setNotice('No se pudo confirmar el pedido. Revisa el error mostrado en el checkout.');
+      }
     } finally {
-      checkoutSubmittingRef.current = false;
-      setCheckoutSubmitting(false);
+      if (
+        checkoutSubmissionContextRef.current === submissionContext
+        && isSessionContextCurrent(submissionContext)
+      ) {
+        checkoutSubmittingRef.current = false;
+        checkoutSubmissionContextRef.current = null;
+        setCheckoutSubmitting(false);
+      }
     }
   }
 
@@ -1451,9 +1599,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      const result = await adminModel.uploadHomeImages(request, fileList.slice(0, 1));
+      const result = await adminModel.uploadHomeImages(operationRequest, fileList.slice(0, 1));
+      if (!isSessionContextCurrent(operationContext)) return;
       const imageUrl = result?.images?.[0]?.url;
       if (!imageUrl) throw new Error('No se recibió la URL de la imagen.');
 
@@ -1465,15 +1617,19 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
       const nextHomeContent = homeContentModel.save(assignHomeImage(homeContent, target, imageUrl));
       setHomeContent(nextHomeContent);
-      const savedHomeContent = await homeContentModel.saveRemote(request, nextHomeContent);
-      setHomeContent(savedHomeContent);
-      setNotice('Imagen subida, asignada y guardada en Atlas.');
+      const savedHomeContent = await homeContentModel.saveRemote(operationRequest, nextHomeContent);
+      if (isSessionContextCurrent(operationContext)) {
+        setHomeContent(savedHomeContent);
+        setNotice('Imagen subida, asignada y guardada en Atlas.');
+      }
     } catch (error) {
-      setNotice(error.message === 'Internal server error'
-        ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
-        : error.message);
+      if (isSessionContextCurrent(operationContext)) {
+        setNotice(error.message === 'Internal server error'
+          ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
+          : error.message);
+      }
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1650,14 +1806,20 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   async function saveHomeContentSettings() {
     if (session?.user?.role !== 'admin') return;
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      setHomeContent(await homeContentModel.saveRemote(request, homeContent));
-      setNotice('Portada guardada en Atlas.');
+      const savedHomeContent = await homeContentModel.saveRemote(operationRequest, homeContent);
+      if (isSessionContextCurrent(operationContext)) {
+        setHomeContent(savedHomeContent);
+        setNotice('Portada guardada en Atlas.');
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1749,16 +1911,22 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      const updated = await adminModel.updateUser(request, selectedAdminUserId, adminUserForm);
-      await loadAdminUsers();
-      selectAdminUser(updated);
-      setNotice('Usuario actualizado correctamente.');
+      const updated = await adminModel.updateUser(operationRequest, selectedAdminUserId, adminUserForm);
+      if (!isSessionContextCurrent(operationContext)) return;
+      await loadAdminUsers(operationContext);
+      if (isSessionContextCurrent(operationContext)) {
+        selectAdminUser(updated);
+        setNotice('Usuario actualizado correctamente.');
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1770,40 +1938,54 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      await adminModel.deleteUser(request, userId);
-      await loadAdminUsers();
-      if (selectedAdminUserId === userId) {
-        setSelectedAdminUserId('');
-        setSelectedAdminOrderId('');
-        setAdminUserForm({ ...initialAdminUserForm });
+      await adminModel.deleteUser(operationRequest, userId);
+      await loadAdminUsers(operationContext);
+      if (isSessionContextCurrent(operationContext)) {
+        if (selectedAdminUserId === userId) {
+          setSelectedAdminUserId('');
+          setSelectedAdminOrderId('');
+          setAdminUserForm({ ...initialAdminUserForm });
+        }
+        setNotice('Usuario eliminado correctamente.');
       }
-      setNotice('Usuario eliminado correctamente.');
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
   async function createCategory(event) {
     event.preventDefault();
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
       if (selectedAdminCategoryId) {
-        await adminModel.updateCategory(request, selectedAdminCategoryId, categoryForm);
-        setNotice('Categoría actualizada correctamente.');
+        await adminModel.updateCategory(operationRequest, selectedAdminCategoryId, categoryForm);
+        if (isSessionContextCurrent(operationContext)) {
+          setNotice('Categoría actualizada correctamente.');
+        }
       } else {
-        await adminModel.createCategory(request, categoryForm);
-        setNotice('Categoría creada correctamente.');
+        await adminModel.createCategory(operationRequest, categoryForm);
+        if (isSessionContextCurrent(operationContext)) {
+          setNotice('Categoría creada correctamente.');
+        }
       }
-      resetCategoryForm();
-      await loadCategories();
+      if (isSessionContextCurrent(operationContext)) {
+        resetCategoryForm();
+        await loadCategories();
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1811,36 +1993,49 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     const categoryId = category?._id || category?.id;
     if (!categoryId) return;
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      await adminModel.deleteCategory(request, categoryId);
-      if (selectedAdminCategoryId === categoryId) resetCategoryForm();
-      await loadCategories();
-      setNotice('Categoría eliminada correctamente.');
+      await adminModel.deleteCategory(operationRequest, categoryId);
+      if (isSessionContextCurrent(operationContext)) {
+        if (selectedAdminCategoryId === categoryId) resetCategoryForm();
+        await loadCategories();
+        if (isSessionContextCurrent(operationContext)) {
+          setNotice('Categoría eliminada correctamente.');
+        }
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
   async function createProduct(event) {
     event.preventDefault();
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
       const saved = selectedAdminProductId
-        ? await adminModel.updateProduct(request, selectedAdminProductId, productForm)
-        : await adminModel.createProduct(request, productForm);
+        ? await adminModel.updateProduct(operationRequest, selectedAdminProductId, productForm)
+        : await adminModel.createProduct(operationRequest, productForm);
+      if (!isSessionContextCurrent(operationContext)) return;
       setImageForm((current) => ({ ...current, productId: saved._id || saved.id || '' }));
       resetProductForm();
       await loadProducts();
       await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice(selectedAdminProductId ? 'Producto actualizado correctamente.' : 'Producto creado correctamente.');
+      await loadAdminProducts(operationContext);
+      if (isSessionContextCurrent(operationContext)) {
+        setNotice(selectedAdminProductId ? 'Producto actualizado correctamente.' : 'Producto creado correctamente.');
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1848,18 +2043,24 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     const productId = product?._id || product?.id;
     if (!productId) return;
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      await adminModel.deleteProduct(request, productId);
+      await adminModel.deleteProduct(operationRequest, productId);
+      if (!isSessionContextCurrent(operationContext)) return;
       if (selectedAdminProductId === productId) resetProductForm();
       await loadProducts();
       await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice('Producto eliminado correctamente.');
+      await loadAdminProducts(operationContext);
+      if (isSessionContextCurrent(operationContext)) {
+        setNotice('Producto eliminado correctamente.');
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1870,9 +2071,13 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      const updated = await adminModel.uploadProductImages(request, imageForm.productId, imageForm.files);
+      const updated = await adminModel.uploadProductImages(operationRequest, imageForm.productId, imageForm.files);
+      if (!isSessionContextCurrent(operationContext)) return;
       setImageForm({ ...initialImageForm, productId: imageForm.productId });
       setProductForm((current) => ({
         ...current,
@@ -1880,14 +2085,16 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       }));
       await loadProducts();
       await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice('Imágenes subidas correctamente.');
+      await loadAdminProducts(operationContext);
+      if (isSessionContextCurrent(operationContext)) setNotice('Imágenes subidas correctamente.');
     } catch (error) {
-      setNotice(error.message === 'Internal server error'
-        ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
-        : error.message);
+      if (isSessionContextCurrent(operationContext)) {
+        setNotice(error.message === 'Internal server error'
+          ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
+          : error.message);
+      }
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
@@ -1899,25 +2106,33 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      await adminModel.saveImageUrl(request, product, imageForm.imageUrl, imageForm.imageName);
+      await adminModel.saveImageUrl(operationRequest, product, imageForm.imageUrl, imageForm.imageName);
+      if (!isSessionContextCurrent(operationContext)) return;
       setImageForm({ ...initialImageForm, productId: imageForm.productId });
       await loadProducts();
       await loadFeaturedProducts();
-      await loadAdminProducts();
-      setNotice('Imagen guardada desde URL.');
+      await loadAdminProducts(operationContext);
+      if (isSessionContextCurrent(operationContext)) setNotice('Imagen guardada desde URL.');
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
   async function cancelOrder(order) {
     const orderId = getOrderId(order);
     const targetOrder = orders.find((item) => getOrderId(item) === orderId);
-    const cancellationOwnerKey = getSessionOwnerKey(session);
+    const cancellationContext = captureSessionContext();
+    const cancellationSession = activeSessionRef.current;
+    const cancellationLockKey = cancellationContext
+      ? 'generation:' + cancellationContext.generation + '|order:' + orderId
+      : '';
     const setCancellationError = (message) => {
       if (!orderId) {
         setNotice(message);
@@ -1934,11 +2149,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setCancellationError('No se pudo identificar el pedido en la lista actual. Actualiza «Pedidos» antes de reintentar.');
       return null;
     }
-    if (!session?.user || session.user.role === 'admin') {
+    if (!cancellationContext || !cancellationSession?.user || cancellationSession.user.role === 'admin') {
       setCancellationError('Inicia sesión con la cuenta propietaria para cancelar este pedido.');
       return null;
     }
-    if (!isOrderOwnedBySession(targetOrder, session)) {
+    if (!isOrderOwnedBySession(targetOrder, cancellationSession)) {
       setCancellationError('No tienes permiso para cancelar este pedido.');
       return null;
     }
@@ -1946,9 +2161,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setCancellationError('Solo los pedidos pendientes pueden cancelarse desde la tienda.');
       return null;
     }
-    if (cancellingOrderIdsRef.current.has(orderId)) return null;
+    if (cancellingOrderIdsRef.current.has(cancellationLockKey)) return null;
 
-    cancellingOrderIdsRef.current.add(orderId);
+    const cancellationRequest = createSessionRequest(cancellationContext);
+    cancellingOrderIdsRef.current.add(cancellationLockKey);
     setCancellingOrderIds((current) => (
       current.includes(orderId) ? current : [...current, orderId]
     ));
@@ -1956,10 +2172,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setOrderCancellationFocusTarget(null);
 
     try {
-      const updatedOrder = await orderModel.cancel(request, orderId);
-      if (getSessionOwnerKey(activeSessionRef.current) !== cancellationOwnerKey) return null;
+      const updatedOrder = await orderModel.cancel(cancellationRequest, orderId);
+      if (!isSessionContextCurrent(cancellationContext)) return null;
       if (
-        !isOrderOwnedBySession(updatedOrder, session)
+        !isOrderOwnedBySession(updatedOrder, cancellationSession)
         || updatedOrder.cancellation?.source !== 'client'
       ) {
         const error = new Error('La cancelación no corresponde al pedido solicitado.');
@@ -1975,13 +2191,15 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setNotice('Pedido ' + orderId.slice(-6) + ' cancelado. El servidor ha confirmado la anulación.');
       return updatedOrder;
     } catch (error) {
-      if (getSessionOwnerKey(activeSessionRef.current) === cancellationOwnerKey) {
+      if (isSessionContextCurrent(cancellationContext)) {
         setCancellationError(getOrderCancellationError(error));
       }
       return null;
     } finally {
-      cancellingOrderIdsRef.current.delete(orderId);
-      setCancellingOrderIds((current) => current.filter((id) => id !== orderId));
+      cancellingOrderIdsRef.current.delete(cancellationLockKey);
+      if (isSessionContextCurrent(cancellationContext)) {
+        setCancellingOrderIds((current) => current.filter((id) => id !== orderId));
+      }
     }
   }
 
@@ -1989,17 +2207,22 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     const orderId = order._id || order.id;
     if (!orderId || session?.user?.role !== 'admin') return;
 
+    const operationContext = captureSessionContext();
+    if (!operationContext) return;
+    const operationRequest = createSessionRequest(operationContext);
     setBusy(true);
     try {
-      await orderModel.delete(request, orderId);
-      await loadOrders();
+      await orderModel.delete(operationRequest, orderId);
+      await loadOrders(operationContext);
       await loadProducts();
       await loadFeaturedProducts();
-      setNotice('Pedido eliminado y stock repuesto.');
+      if (isSessionContextCurrent(operationContext)) {
+        setNotice('Pedido eliminado y stock repuesto.');
+      }
     } catch (error) {
-      setNotice(error.message);
+      if (isSessionContextCurrent(operationContext)) setNotice(error.message);
     } finally {
-      setBusy(false);
+      if (isSessionContextCurrent(operationContext)) setBusy(false);
     }
   }
 
