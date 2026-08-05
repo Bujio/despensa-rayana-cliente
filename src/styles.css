@@ -457,6 +457,9 @@ input:focus, select:focus { border-color: #315c45; box-shadow: 0 0 0 3px rgba(49
 .status.cancelled { background: #ffe8e4; color: #9f2c1f; }
 .status.delivered { background: #e2f4e8; color: #21633b; }
 .status.shipped { background: #e8f0ff; color: #2c559c; }
+.status.published { background: #e2f4e8; color: #21633b; }
+.status.draft { background: #f1ede4; color: #5d5545; }
+.status.rejected { background: #ffe8e4; color: #9f2c1f; }
 
 .account-view {
   display: grid;
@@ -1512,6 +1515,203 @@ textarea,
 .admin-search {
   min-height: 44px;
   background: #ffffff;
+}
+
+.admin-products-search-form {
+  display: grid;
+  gap: 8px;
+}
+
+.products-list-panel {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.admin-products-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.admin-products-search-row > * {
+  min-width: 0;
+}
+
+.admin-products-search-row .secondary {
+  min-height: 44px;
+}
+
+.admin-search-scope {
+  margin: 0;
+  color: #626b60;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.admin-products-controls {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-products-controls label {
+  width: min(220px, 100%);
+}
+
+.admin-products-count {
+  display: grid;
+  justify-items: end;
+  color: #525a50;
+  line-height: 1.25;
+}
+
+.admin-products-count strong {
+  color: #1e2a22;
+  font-size: 24px;
+}
+
+.admin-products-feedback {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px dashed rgba(49, 92, 69, 0.28);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #525a50;
+  padding: 18px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.admin-products-feedback.error {
+  border-color: rgba(159, 44, 31, 0.3);
+  background: #fff6f4;
+  color: #7d281f;
+}
+
+.admin-product-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+@media (min-width: 681px) {
+  .products-list-panel .collection-row.with-thumb {
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    gap: 6px 8px;
+  }
+
+  .products-list-panel .collection-row.with-thumb > .admin-thumb {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 52px;
+    height: 52px;
+  }
+
+  .products-list-panel .collection-row.with-thumb > .user-main {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .products-list-panel .collection-row.with-thumb > .admin-product-badges {
+    grid-column: 2;
+    grid-row: 2;
+    justify-content: flex-start;
+  }
+
+  .products-list-panel .collection-row.with-thumb > .icon-button:nth-of-type(2) {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .products-list-panel .collection-row.with-thumb > .icon-button:nth-of-type(3) {
+    grid-column: 3;
+    grid-row: 2;
+  }
+}
+
+.admin-products-pager {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-products-pager .secondary {
+  min-height: 42px;
+  padding: 9px 11px;
+}
+
+.admin-pager-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.admin-pager-summary {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  place-content: center;
+  gap: 2px;
+  min-width: 0;
+  color: #626b60;
+  text-align: center;
+  font-size: 12px;
+}
+
+.admin-pager-summary strong {
+  color: #1e2a22;
+  font-size: 14px;
+}
+
+@media (max-width: 680px) {
+  .admin-products-search-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-products-search-row .input-wrap {
+    grid-column: 1 / -1;
+  }
+
+  .admin-products-search-row .secondary {
+    width: 100%;
+  }
+
+  .admin-products-controls,
+  .admin-products-feedback {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-products-count {
+    justify-items: start;
+  }
+
+  .admin-product-badges {
+    justify-content: flex-start;
+  }
+
+  .admin-products-pager {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-products-pager .secondary {
+    width: 100%;
+  }
+
+  .admin-pager-summary {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-height: 56px;
+  }
 }
 
 .user-row.active,

@@ -119,13 +119,18 @@ function AdminTabs({ active, actions }) {
 }
 
 export function AdminView({ state, actions }) {
-  const productsPerPage = 5;
   const categoriesPerPage = 5;
-  const [adminProductsPage, setAdminProductsPage] = useState(1);
   const [adminCategoriesPage, setAdminCategoriesPage] = useState(1);
   const [selectedHomeSectionId, setSelectedHomeSectionId] = useState('');
   const {
     adminProducts,
+    adminProductsError,
+    adminProductsLimit,
+    adminProductsLoading,
+    adminProductsPage,
+    adminProductsQuery,
+    adminProductsTotal,
+    adminProductsTotalPages,
     adminReviews,
     adminSearch,
     adminTab,
@@ -148,29 +153,6 @@ export function AdminView({ state, actions }) {
     selectedAdminUserOrders,
     session,
   } = state;
-
-  const filteredProducts = adminProducts.filter((product) => includesSearch([
-    product.name,
-    product.sku,
-    product.description,
-    productModel.getCategoryName(product.category),
-    product.supplier?.name,
-  ], adminSearch.products));
-  const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
-  const paginatedProducts = filteredProducts.slice(
-    (adminProductsPage - 1) * productsPerPage,
-    adminProductsPage * productsPerPage,
-  );
-
-  useEffect(() => {
-    setAdminProductsPage(1);
-  }, [adminSearch.products, adminProducts.length]);
-
-  useEffect(() => {
-    if (adminProductsPage > productTotalPages) {
-      setAdminProductsPage(productTotalPages);
-    }
-  }, [adminProductsPage, productTotalPages]);
 
   const filteredCategories = categories.filter((category) => includesSearch([
     category.name,
@@ -619,58 +601,166 @@ export function AdminView({ state, actions }) {
         <div className="admin-products-layout">
           <section className="admin-panel products-list-panel">
             <div className="admin-panel-title"><PackagePlus size={19} /> Productos</div>
-            <label className="input-wrap admin-search">
-              <Search size={17} />
-              <input value={adminSearch.products} onChange={(event) => actions.setAdminSearch('products', event.target.value)} placeholder="Buscar producto..." />
-            </label>
+            <form
+              className="admin-products-search-form"
+              role="search"
+              aria-label="Buscar en todo el inventario administrativo"
+              onSubmit={actions.applyAdminProductsSearch}
+            >
+              <label htmlFor="admin-products-search">Buscar en todo el inventario</label>
+              <div className="admin-products-search-row">
+                <div className="input-wrap admin-search">
+                  <Search size={17} aria-hidden="true" />
+                  <input
+                    id="admin-products-search"
+                    value={adminSearch.products}
+                    onChange={(event) => actions.setAdminSearch('products', event.target.value)}
+                    placeholder="Nombre, SKU, categoría o proveedor"
+                    disabled={adminProductsLoading}
+                    aria-controls="admin-products-list"
+                  />
+                </div>
+                <button className="secondary" type="submit" disabled={adminProductsLoading}>
+                  Buscar
+                </button>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={actions.clearAdminProductsSearch}
+                  disabled={adminProductsLoading || (!adminSearch.products && !adminProductsQuery)}
+                >
+                  Limpiar
+                </button>
+              </div>
+              <p className="admin-search-scope">
+                La búsqueda se aplica en el servidor a todos los productos, no solo a esta página.
+              </p>
+            </form>
+            <div className="admin-products-controls">
+              <label htmlFor="admin-products-limit">
+                Productos por página
+                <select
+                  id="admin-products-limit"
+                  value={adminProductsLimit}
+                  onChange={(event) => actions.changeAdminProductsLimit(event.target.value)}
+                  disabled={adminProductsLoading}
+                >
+                  <option value="10">10</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </label>
+              <div className="admin-products-count" role="status" aria-live="polite" aria-atomic="true">
+                <strong>{adminProductsTotal}</strong>
+                <span>{adminProductsTotal === 1 ? 'producto total' : 'productos totales'}</span>
+              </div>
+            </div>
             <button className="secondary full" type="button" onClick={actions.resetProductForm}>
               <Plus size={17} /> Nuevo producto
             </button>
-            <div className="admin-list">
-              {paginatedProducts.map((product) => {
-                const productId = getId(product);
-                const offerLabel = productModel.getOfferLabel(product);
-                const image = productModel.getImage(product);
-                return (
-                  <article className={'collection-row with-thumb' + (selectedAdminProductId === productId ? ' active' : '')} key={productId}>
-                    <div className="admin-thumb">
-                      {image ? <img src={image} alt={product.name} /> : <PackagePlus size={22} />}
-                    </div>
-                    <button className="user-main" type="button" onClick={() => actions.selectAdminProduct(product)}>
-                      <strong>{product.name}</strong>
-                      <span>{product.sku} · {formatCurrency(product.price)} · {product.stock} uds.</span>
-                    </button>
-                    {offerLabel && <span className="offer-pill">{offerLabel}</span>}
-                    <button className="icon-button" type="button" onClick={() => actions.selectAdminProduct(product)} title="Editar producto"><Eye size={17} /></button>
-                    <button className="icon-button danger-button" type="button" onClick={() => actions.deleteProduct(product)} disabled={busy} title="Eliminar producto"><Trash2 size={17} /></button>
-                  </article>
-                );
-              })}
-            </div>
-            {filteredProducts.length ? (
-              <div className="pager admin-pager">
-                <button
-                  className="icon-button"
-                  type="button"
-                  disabled={adminProductsPage <= 1}
-                  onClick={() => setAdminProductsPage((value) => Math.max(1, value - 1))}
-                  title="Página anterior"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <span>Página {adminProductsPage} de {productTotalPages} · {filteredProducts.length} productos</span>
-                <button
-                  className="icon-button"
-                  type="button"
-                  disabled={adminProductsPage >= productTotalPages}
-                  onClick={() => setAdminProductsPage((value) => Math.min(productTotalPages, value + 1))}
-                  title="Página siguiente"
-                >
-                  <ChevronRight size={18} />
+            {adminProductsError && (
+              <div className="admin-products-feedback error" role="alert">
+                <span>{adminProductsError}</span>
+                <button className="secondary" type="button" onClick={actions.retryAdminProducts}>
+                  Reintentar
                 </button>
               </div>
-            ) : (
-              <div className="empty-state compact-empty">No hay productos para mostrar.</div>
+            )}
+            {adminProductsLoading ? (
+              <div className="admin-products-feedback" role="status" aria-live="polite">
+                Cargando la página {adminProductsPage} del inventario…
+              </div>
+            ) : adminProducts.length ? (
+              <>
+                <div className="admin-list" id="admin-products-list" aria-label={'Productos de la página ' + adminProductsPage}>
+                  {adminProducts.map((product) => {
+                    const productId = getId(product);
+                    const offerLabel = productModel.getOfferLabel(product);
+                    const image = productModel.getImage(product);
+                    return (
+                      <article className={'collection-row with-thumb' + (selectedAdminProductId === productId ? ' active' : '')} key={productId}>
+                        <div className="admin-thumb">
+                          {image ? <img src={image} alt={product.name} /> : <PackagePlus size={22} />}
+                        </div>
+                        <button className="user-main" type="button" onClick={() => actions.selectAdminProduct(product)}>
+                          <strong>{product.name}</strong>
+                          <span>{product.sku} · {formatCurrency(product.price)} · {product.stock} uds.</span>
+                        </button>
+                        <div className="admin-product-badges">
+                          <span className={'status ' + (product.status || 'published')}>{product.status || 'published'}</span>
+                          {offerLabel && <span className="offer-pill">{offerLabel}</span>}
+                        </div>
+                        <button
+                          className="icon-button"
+                          type="button"
+                          onClick={() => actions.selectAdminProduct(product)}
+                          title="Editar producto"
+                          aria-label={'Editar ' + product.name}
+                        >
+                          <Eye size={17} />
+                        </button>
+                        <button
+                          className="icon-button danger-button"
+                          type="button"
+                          onClick={() => actions.deleteProduct(product)}
+                          disabled={busy}
+                          title="Eliminar producto"
+                          aria-label={'Eliminar ' + product.name}
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+                <nav className="pager admin-pager admin-products-pager" aria-label="Paginación del inventario administrativo">
+                  <button
+                    className="secondary admin-pager-edge"
+                    type="button"
+                    disabled={adminProductsLoading || adminProductsPage <= 1}
+                    onClick={() => actions.goToAdminProductsPage(1)}
+                  >
+                    Primera
+                  </button>
+                  <button
+                    className="secondary admin-pager-step"
+                    type="button"
+                    disabled={adminProductsLoading || adminProductsPage <= 1}
+                    onClick={() => actions.goToAdminProductsPage(adminProductsPage - 1)}
+                    aria-label="Ir a la página anterior"
+                  >
+                    <ChevronLeft size={18} aria-hidden="true" /> Anterior
+                  </button>
+                  <div className="admin-pager-summary" role="status" aria-live="polite" aria-atomic="true">
+                    <strong>Página {adminProductsPage} de {adminProductsTotalPages}</strong>
+                    <span>{adminProductsTotal} productos</span>
+                    {adminProductsQuery && <span>Filtro: “{adminProductsQuery}”</span>}
+                  </div>
+                  <button
+                    className="secondary admin-pager-step"
+                    type="button"
+                    disabled={adminProductsLoading || adminProductsPage >= adminProductsTotalPages}
+                    onClick={() => actions.goToAdminProductsPage(adminProductsPage + 1)}
+                    aria-label="Ir a la página siguiente"
+                  >
+                    Siguiente <ChevronRight size={18} aria-hidden="true" />
+                  </button>
+                  <button
+                    className="secondary admin-pager-edge"
+                    type="button"
+                    disabled={adminProductsLoading || adminProductsPage >= adminProductsTotalPages}
+                    onClick={() => actions.goToAdminProductsPage(adminProductsTotalPages)}
+                  >
+                    Última
+                  </button>
+                </nav>
+              </>
+            ) : !adminProductsError && (
+              <div className="empty-state compact-empty" role="status">
+                {adminProductsQuery
+                  ? 'No hay productos que coincidan con la búsqueda en el inventario completo.'
+                  : 'El inventario administrativo está vacío.'}
+              </div>
             )}
           </section>
 
@@ -924,8 +1014,14 @@ export function AdminView({ state, actions }) {
             <div className="admin-panel-title"><ImageUp size={19} /> Imágenes</div>
             <label className="input-wrap admin-search">
               <Search size={17} />
-              <input value={adminSearch.media} onChange={(event) => actions.setAdminSearch('media', event.target.value)} placeholder="Buscar producto..." />
+              <input
+                value={adminSearch.media}
+                onChange={(event) => actions.setAdminSearch('media', event.target.value)}
+                placeholder="Filtrar la página de productos cargada..."
+                aria-label="Filtrar productos de la página administrativa actual"
+              />
             </label>
+            <p className="admin-search-scope">Este filtro solo afecta a la página administrativa cargada.</p>
             <label>
               Producto
               <select required value={imageForm.productId} onChange={updateImage('productId')}>
