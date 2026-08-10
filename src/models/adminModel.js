@@ -66,6 +66,34 @@ function invalidAdminProductsResponse() {
   return new Error('El inventario administrativo devolvió una respuesta no válida.');
 }
 
+const INVALID_PRODUCT_RESPONSE_MESSAGE = 'No se ha podido confirmar el resultado de la operación. Comprueba el estado del producto antes de volver a intentarlo.';
+
+function invalidAdminProductMutationResponse() {
+  const error = new Error(INVALID_PRODUCT_RESPONSE_MESSAGE);
+  error.name = 'InvalidProductResponseError';
+  error.code = 'INVALID_PRODUCT_RESPONSE';
+  error.operationResultUnknown = true;
+  return error;
+}
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isCanonicalProductImage(image) {
+  return Boolean(
+    image
+    && typeof image === 'object'
+    && !Array.isArray(image)
+    && isNonEmptyString(image.url)
+    && (image.name === undefined || typeof image.name === 'string')
+  );
+}
+
+function isCanonicalProductImages(images) {
+  return Array.isArray(images) && images.every(isCanonicalProductImage);
+}
+
 function buildAdminProductsQuery({
   page = 1,
   limit = 50,
@@ -142,14 +170,51 @@ function normalizeAdminProductsResponse(result, requestedPage, requestedLimit) {
   };
 }
 
-function normalizeAdminProductMutationResponse(result, expectedProductId = '') {
-  if (!result || typeof result !== 'object' || Array.isArray(result)) {
-    throw new Error('La mutación del producto devolvió una respuesta no válida.');
-  }
-  const productId = getAdminProductId(result);
-  if (!productId || (expectedProductId && productId !== String(expectedProductId))) {
-    throw new Error('La mutación del producto devolvió una respuesta no válida.');
-  }
+function normalizeAdminProductMutationResponse(
+  result,
+  { expectedProductId = '', requireImages = false } = {},
+) {
+  const rawProductId = result?._id ?? result?.id;
+  const productId = typeof rawProductId === 'string' ? rawProductId : '';
+  const hasConflictingIds = result?._id !== undefined
+    && result?.id !== undefined
+    && (
+      typeof result._id !== 'string'
+      || typeof result.id !== 'string'
+      || result._id !== result.id
+    );
+  const supplier = result?.supplier;
+  const hasCanonicalImages = result?.images === undefined
+    || isCanonicalProductImages(result.images);
+  const hasCanonicalSupplierImages = supplier?.images === undefined
+    || isCanonicalProductImages(supplier.images);
+  const hasCanonicalProduct = result
+    && typeof result === 'object'
+    && !Array.isArray(result)
+    && isNonEmptyString(productId)
+    && productId === productId.trim()
+    && !hasConflictingIds
+    && (!expectedProductId || (
+      typeof expectedProductId === 'string'
+      && productId === expectedProductId
+    ))
+    && isNonEmptyString(result.name)
+    && isNonEmptyString(result.sku)
+    && typeof result.price === 'number'
+    && Number.isFinite(result.price)
+    && result.price >= 0
+    && Number.isSafeInteger(result.stock)
+    && result.stock >= 0
+    && supplier
+    && typeof supplier === 'object'
+    && !Array.isArray(supplier)
+    && Number.isSafeInteger(supplier.id)
+    && supplier.id >= 0
+    && hasCanonicalImages
+    && hasCanonicalSupplierImages
+    && (!requireImages || Array.isArray(result.images));
+
+  if (!hasCanonicalProduct) throw invalidAdminProductMutationResponse();
   return result;
 }
 
@@ -271,7 +336,7 @@ export const adminModel = {
       method: 'PATCH',
       body: JSON.stringify(buildProductPayload(form)),
     });
-    return normalizeAdminProductMutationResponse(result, productId);
+    return normalizeAdminProductMutationResponse(result, { expectedProductId: productId });
   },
 
   async deleteProduct(request, productId) {
@@ -287,7 +352,10 @@ export const adminModel = {
       method: 'POST',
       body: formData,
     });
-    return normalizeAdminProductMutationResponse(result, productId);
+    return normalizeAdminProductMutationResponse(result, {
+      expectedProductId: productId,
+      requireImages: true,
+    });
   },
 
   uploadHomeImages(request, files) {
@@ -314,6 +382,9 @@ export const adminModel = {
         images: [...currentImages, nextImage].slice(-5),
       }),
     });
-    return normalizeAdminProductMutationResponse(result, productId);
+    return normalizeAdminProductMutationResponse(result, {
+      expectedProductId: productId,
+      requireImages: true,
+    });
   },
 };

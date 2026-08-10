@@ -160,6 +160,8 @@ export function AdminView({ state, actions }) {
     session,
   } = state;
   const adminProductsSummaryRef = useRef(null);
+  const productImageFileInputRef = useRef(null);
+  const mediaImageFileInputRef = useRef(null);
   const displayedAdminProductsPage = adminProductsDisplayedContext?.page || 1;
   const displayedAdminProductsQuery = adminProductsDisplayedContext?.query || '';
   const adminProductsContextChanging = Boolean(
@@ -210,6 +212,13 @@ export function AdminView({ state, actions }) {
     if (!adminProductsFocusTarget?.version) return;
     adminProductsSummaryRef.current?.focus({ preventScroll: false });
   }, [adminProductsFocusTarget?.version]);
+
+  useEffect(() => {
+    if (imageForm.files.length) return;
+    [productImageFileInputRef, mediaImageFileInputRef].forEach((inputRef) => {
+      if (inputRef.current) inputRef.current.value = '';
+    });
+  }, [imageForm.files.length]);
 
   if (session?.user?.role !== 'admin') {
     return (
@@ -972,7 +981,7 @@ export function AdminView({ state, actions }) {
               </div>
 
               <div className="file-image-editor">
-                <label>Subir archivo<input type="file" accept="image/*" multiple onChange={updateFiles} disabled={!selectedAdminProductId || productEditorBusy} /></label>
+                <label>Subir archivo<input ref={productImageFileInputRef} type="file" accept="image/*" multiple onChange={updateFiles} disabled={!selectedAdminProductId || productEditorBusy} /></label>
                 <div className="file-summary">
                   {selectedAdminProductId
                     ? (imageForm.files.length ? imageForm.files.map((file) => file.name).join(', ') : 'Subida vía Cloudinary. Máximo 5 imágenes, 5 MB cada una.')
@@ -1170,7 +1179,7 @@ export function AdminView({ state, actions }) {
             </label>
 
             <form className="nested-admin-form" onSubmit={actions.uploadProductImages}>
-              <label>Archivo<input type="file" accept="image/*" multiple onChange={updateFiles} /></label>
+              <label>Archivo<input ref={mediaImageFileInputRef} type="file" accept="image/*" multiple onChange={updateFiles} /></label>
               <div className="file-summary">
                 {imageForm.files.length ? imageForm.files.map((file) => file.name).join(', ') : 'Subida vía Cloudinary. Máximo 5 imágenes, 5 MB cada una.'}
               </div>
