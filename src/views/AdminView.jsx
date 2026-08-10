@@ -26,7 +26,7 @@ import {
   UserCog,
   Users,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { productModel } from '../models/productModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { formatCurrency } from './viewFormatters.js';
@@ -124,13 +124,19 @@ export function AdminView({ state, actions }) {
   const [selectedHomeSectionId, setSelectedHomeSectionId] = useState('');
   const {
     adminProducts,
+    adminProductsDisplayedContext,
     adminProductsError,
+    adminProductsFilters,
+    adminProductsFocusTarget,
+    adminProductsFormResetVersion,
     adminProductsLimit,
     adminProductsLoading,
     adminProductsPage,
     adminProductsQuery,
+    adminProductsStale,
     adminProductsTotal,
     adminProductsTotalPages,
+    adminProductMutationKeys,
     adminReviews,
     adminSearch,
     adminTab,
@@ -153,6 +159,31 @@ export function AdminView({ state, actions }) {
     selectedAdminUserOrders,
     session,
   } = state;
+  const adminProductsSummaryRef = useRef(null);
+  const displayedAdminProductsPage = adminProductsDisplayedContext?.page || 1;
+  const displayedAdminProductsQuery = adminProductsDisplayedContext?.query || '';
+  const adminProductsContextChanging = Boolean(
+    adminProductsLoading
+    && adminProductsDisplayedContext
+    && (
+      displayedAdminProductsPage !== adminProductsPage
+      || displayedAdminProductsQuery !== adminProductsQuery
+      || adminProductsDisplayedContext.limit !== adminProductsLimit
+      || adminProductsDisplayedContext.categoryId !== adminProductsFilters.categoryId
+      || adminProductsDisplayedContext.inStock !== (adminProductsFilters.inStock === 'true')
+      || adminProductsDisplayedContext.minPrice !== adminProductsFilters.minPrice
+      || adminProductsDisplayedContext.maxPrice !== adminProductsFilters.maxPrice
+      || adminProductsDisplayedContext.sort !== adminProductsFilters.sort
+      || adminProductsDisplayedContext.order !== adminProductsFilters.order
+    )
+  );
+  const isAdminProductMutating = (productId) => (
+    adminProductMutationKeys.includes('product:' + productId)
+  );
+  const productEditorMutationKey = selectedAdminProductId
+    ? 'product:' + selectedAdminProductId
+    : 'create';
+  const productEditorBusy = adminProductMutationKeys.includes(productEditorMutationKey);
 
   const filteredCategories = categories.filter((category) => includesSearch([
     category.name,
@@ -174,6 +205,11 @@ export function AdminView({ state, actions }) {
       setAdminCategoriesPage(categoryTotalPages);
     }
   }, [adminCategoriesPage, categoryTotalPages]);
+
+  useEffect(() => {
+    if (!adminProductsFocusTarget?.version) return;
+    adminProductsSummaryRef.current?.focus({ preventScroll: false });
+  }, [adminProductsFocusTarget?.version]);
 
   if (session?.user?.role !== 'admin') {
     return (
@@ -599,7 +635,7 @@ export function AdminView({ state, actions }) {
 
       {adminTab === 'products' && (
         <div className="admin-products-layout">
-          <section className="admin-panel products-list-panel">
+          <section className="admin-panel products-list-panel" aria-busy={adminProductsLoading}>
             <div className="admin-panel-title"><PackagePlus size={19} /> Productos</div>
             <form
               className="admin-products-search-form"
@@ -616,18 +652,17 @@ export function AdminView({ state, actions }) {
                     value={adminSearch.products}
                     onChange={(event) => actions.setAdminSearch('products', event.target.value)}
                     placeholder="Nombre, SKU, categoría o proveedor"
-                    disabled={adminProductsLoading}
                     aria-controls="admin-products-list"
                   />
                 </div>
-                <button className="secondary" type="submit" disabled={adminProductsLoading}>
+                <button className="secondary" type="submit">
                   Buscar
                 </button>
                 <button
                   className="secondary"
                   type="button"
                   onClick={actions.clearAdminProductsSearch}
-                  disabled={adminProductsLoading || (!adminSearch.products && !adminProductsQuery)}
+                  disabled={!adminSearch.products && !adminProductsQuery}
                 >
                   Limpiar
                 </button>
@@ -636,6 +671,88 @@ export function AdminView({ state, actions }) {
                 La búsqueda se aplica en el servidor a todos los productos, no solo a esta página.
               </p>
             </form>
+            <form className="admin-products-filter-form" onSubmit={actions.applyAdminProductsFilters}>
+              <div className="admin-products-filter-grid">
+                <label htmlFor="admin-products-category-filter">
+                  Categoría
+                  <select
+                    id="admin-products-category-filter"
+                    value={adminProductsFilters.categoryId}
+                    onChange={(event) => actions.changeAdminProductsFilter('categoryId', event.target.value)}
+                  >
+                    <option value="">Todas</option>
+                    {categories.map((category) => (
+                      <option key={getId(category)} value={getId(category)}>{category.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label htmlFor="admin-products-stock-filter">
+                  Stock
+                  <select
+                    id="admin-products-stock-filter"
+                    value={adminProductsFilters.inStock}
+                    onChange={(event) => actions.changeAdminProductsFilter('inStock', event.target.value)}
+                  >
+                    <option value="">Todo el inventario</option>
+                    <option value="true">Solo con stock</option>
+                  </select>
+                </label>
+                <label htmlFor="admin-products-min-price">
+                  Precio mínimo
+                  <input
+                    id="admin-products-min-price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={adminProductsFilters.minPrice}
+                    onChange={(event) => actions.setAdminProductsFilterValue('minPrice', event.target.value)}
+                  />
+                </label>
+                <label htmlFor="admin-products-max-price">
+                  Precio máximo
+                  <input
+                    id="admin-products-max-price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={adminProductsFilters.maxPrice}
+                    onChange={(event) => actions.setAdminProductsFilterValue('maxPrice', event.target.value)}
+                  />
+                </label>
+                <label htmlFor="admin-products-sort">
+                  Ordenar por
+                  <select
+                    id="admin-products-sort"
+                    value={adminProductsFilters.sort}
+                    onChange={(event) => actions.changeAdminProductsFilter('sort', event.target.value)}
+                  >
+                    <option value="createdAt">Fecha de creación</option>
+                    <option value="name">Nombre</option>
+                    <option value="price">Precio</option>
+                    <option value="stock">Stock</option>
+                  </select>
+                </label>
+                <label htmlFor="admin-products-order">
+                  Dirección
+                  <select
+                    id="admin-products-order"
+                    value={adminProductsFilters.order}
+                    onChange={(event) => actions.changeAdminProductsFilter('order', event.target.value)}
+                  >
+                    <option value="asc">Ascendente</option>
+                    <option value="desc">Descendente</option>
+                  </select>
+                </label>
+              </div>
+              <div className="admin-products-filter-actions">
+                <button className="secondary" type="submit">Aplicar precios</button>
+                <button className="secondary" type="button" onClick={actions.clearAdminProductsFilters}>
+                  Limpiar filtros
+                </button>
+              </div>
+            </form>
             <div className="admin-products-controls">
               <label htmlFor="admin-products-limit">
                 Productos por página
@@ -643,7 +760,6 @@ export function AdminView({ state, actions }) {
                   id="admin-products-limit"
                   value={adminProductsLimit}
                   onChange={(event) => actions.changeAdminProductsLimit(event.target.value)}
-                  disabled={adminProductsLoading}
                 >
                   <option value="10">10</option>
                   <option value="50">50</option>
@@ -660,19 +776,27 @@ export function AdminView({ state, actions }) {
             </button>
             {adminProductsError && (
               <div className="admin-products-feedback error" role="alert">
-                <span>{adminProductsError}</span>
+                <span>
+                  {adminProductsError}
+                  {adminProductsStale && ' Se muestran los últimos datos válidos; pueden estar desactualizados.'}
+                </span>
                 <button className="secondary" type="button" onClick={actions.retryAdminProducts}>
                   Reintentar
                 </button>
               </div>
             )}
-            {adminProductsLoading ? (
+            {adminProductsLoading && (
               <div className="admin-products-feedback" role="status" aria-live="polite">
-                Cargando la página {adminProductsPage} del inventario…
+                {adminProductsContextChanging ? 'Actualizando la consulta' : 'Actualizando el inventario'}: página {adminProductsPage}…
               </div>
-            ) : adminProducts.length ? (
+            )}
+            {adminProducts.length ? (
               <>
-                <div className="admin-list" id="admin-products-list" aria-label={'Productos de la página ' + adminProductsPage}>
+                <div
+                  className="admin-list"
+                  id="admin-products-list"
+                  aria-label={'Productos mostrados de la página ' + displayedAdminProductsPage}
+                >
                   {adminProducts.map((product) => {
                     const productId = getId(product);
                     const offerLabel = productModel.getOfferLabel(product);
@@ -703,7 +827,7 @@ export function AdminView({ state, actions }) {
                           className="icon-button danger-button"
                           type="button"
                           onClick={() => actions.deleteProduct(product)}
-                          disabled={busy}
+                          disabled={isAdminProductMutating(productId)}
                           title="Eliminar producto"
                           aria-label={'Eliminar ' + product.name}
                         >
@@ -717,7 +841,7 @@ export function AdminView({ state, actions }) {
                   <button
                     className="secondary admin-pager-edge"
                     type="button"
-                    disabled={adminProductsLoading || adminProductsPage <= 1}
+                    disabled={adminProductsPage <= 1}
                     onClick={() => actions.goToAdminProductsPage(1)}
                   >
                     Primera
@@ -725,21 +849,29 @@ export function AdminView({ state, actions }) {
                   <button
                     className="secondary admin-pager-step"
                     type="button"
-                    disabled={adminProductsLoading || adminProductsPage <= 1}
+                    disabled={adminProductsPage <= 1}
                     onClick={() => actions.goToAdminProductsPage(adminProductsPage - 1)}
                     aria-label="Ir a la página anterior"
                   >
                     <ChevronLeft size={18} aria-hidden="true" /> Anterior
                   </button>
-                  <div className="admin-pager-summary" role="status" aria-live="polite" aria-atomic="true">
-                    <strong>Página {adminProductsPage} de {adminProductsTotalPages}</strong>
+                  <div
+                    className="admin-pager-summary"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    tabIndex="-1"
+                    ref={adminProductsSummaryRef}
+                  >
+                    <strong>Página {displayedAdminProductsPage} de {adminProductsTotalPages}</strong>
                     <span>{adminProductsTotal} productos</span>
-                    {adminProductsQuery && <span>Filtro: “{adminProductsQuery}”</span>}
+                    {displayedAdminProductsQuery && <span>Búsqueda mostrada: “{displayedAdminProductsQuery}”</span>}
+                    {adminProductsContextChanging && <span>Actualizando hacia la página {adminProductsPage}</span>}
                   </div>
                   <button
                     className="secondary admin-pager-step"
                     type="button"
-                    disabled={adminProductsLoading || adminProductsPage >= adminProductsTotalPages}
+                    disabled={adminProductsPage >= adminProductsTotalPages}
                     onClick={() => actions.goToAdminProductsPage(adminProductsPage + 1)}
                     aria-label="Ir a la página siguiente"
                   >
@@ -748,23 +880,28 @@ export function AdminView({ state, actions }) {
                   <button
                     className="secondary admin-pager-edge"
                     type="button"
-                    disabled={adminProductsLoading || adminProductsPage >= adminProductsTotalPages}
+                    disabled={adminProductsPage >= adminProductsTotalPages}
                     onClick={() => actions.goToAdminProductsPage(adminProductsTotalPages)}
                   >
                     Última
                   </button>
                 </nav>
               </>
-            ) : !adminProductsError && (
+            ) : !adminProductsLoading && !adminProductsError && (
               <div className="empty-state compact-empty" role="status">
-                {adminProductsQuery
-                  ? 'No hay productos que coincidan con la búsqueda en el inventario completo.'
+                {adminProductsQuery || adminProductsFilters.categoryId || adminProductsFilters.inStock
+                  || adminProductsFilters.minPrice !== '' || adminProductsFilters.maxPrice !== ''
+                  ? 'No hay productos que coincidan con la búsqueda y los filtros aplicados.'
                   : 'El inventario administrativo está vacío.'}
               </div>
             )}
           </section>
 
-          <form className="admin-panel product-editor-panel" onSubmit={actions.createProduct}>
+          <form
+            className="admin-panel product-editor-panel"
+            onSubmit={actions.createProduct}
+            key={'product-editor-' + adminProductsFormResetVersion}
+          >
             <div className="admin-panel-title"><PackagePlus size={19} /> {selectedAdminProductId ? 'Editar producto' : 'Nuevo producto'}</div>
             <div className="admin-form-grid">
               <label>Nombre<input required value={productForm.name} onChange={updateProduct('name')} placeholder="Ej. Miel Villuercas-Ibores" /></label>
@@ -814,7 +951,7 @@ export function AdminView({ state, actions }) {
                         className="icon-button danger-button"
                         type="button"
                         onClick={() => actions.removeProductFormImage(index)}
-                        disabled={busy}
+                        disabled={productEditorBusy}
                         title="Eliminar imagen"
                       >
                         <Trash2 size={17} />
@@ -829,19 +966,19 @@ export function AdminView({ state, actions }) {
               <div className="admin-form-grid image-url-editor">
                 <label className="wide-field">URL de imagen<input type="url" value={imageForm.imageUrl} onChange={updateImage('imageUrl')} placeholder="https://..." /></label>
                 <label>Nombre de imagen<input value={imageForm.imageName} onChange={updateImage('imageName')} placeholder="Ej. Vista frontal" /></label>
-                <button className="secondary form-button" type="button" onClick={actions.addProductImageUrl} disabled={busy || !imageForm.imageUrl.trim()}>
+                <button className="secondary form-button" type="button" onClick={actions.addProductImageUrl} disabled={productEditorBusy || !imageForm.imageUrl.trim()}>
                   <Link size={17} /> Añadir URL
                 </button>
               </div>
 
               <div className="file-image-editor">
-                <label>Subir archivo<input type="file" accept="image/*" multiple onChange={updateFiles} disabled={!selectedAdminProductId} /></label>
+                <label>Subir archivo<input type="file" accept="image/*" multiple onChange={updateFiles} disabled={!selectedAdminProductId || productEditorBusy} /></label>
                 <div className="file-summary">
                   {selectedAdminProductId
                     ? (imageForm.files.length ? imageForm.files.map((file) => file.name).join(', ') : 'Subida vía Cloudinary. Máximo 5 imágenes, 5 MB cada una.')
                     : 'Guarda primero el producto para poder subir archivos.'}
                 </div>
-                <button className="primary full" type="button" onClick={actions.uploadProductImages} disabled={busy || !selectedAdminProductId || imageForm.files.length === 0}>
+                <button className="primary full" type="button" onClick={actions.uploadProductImages} disabled={productEditorBusy || !selectedAdminProductId || imageForm.files.length === 0}>
                   <ImageUp size={18} /> Subir archivo
                 </button>
               </div>
@@ -877,7 +1014,7 @@ export function AdminView({ state, actions }) {
               </div>
             </div>
 
-            <button className="primary full" type="submit" disabled={busy}>
+            <button className="primary full" type="submit" disabled={productEditorBusy}>
               <Save size={18} /> {selectedAdminProductId ? 'Guardar producto' : 'Crear producto'}
             </button>
           </form>
@@ -1010,7 +1147,7 @@ export function AdminView({ state, actions }) {
 
       {adminTab === 'media' && (
         <div className="admin-products-layout">
-          <section className="admin-panel media-admin-panel">
+          <section className="admin-panel media-admin-panel" key={'media-products-' + adminProductsFormResetVersion}>
             <div className="admin-panel-title"><ImageUp size={19} /> Imágenes</div>
             <label className="input-wrap admin-search">
               <Search size={17} />
@@ -1037,7 +1174,7 @@ export function AdminView({ state, actions }) {
               <div className="file-summary">
                 {imageForm.files.length ? imageForm.files.map((file) => file.name).join(', ') : 'Subida vía Cloudinary. Máximo 5 imágenes, 5 MB cada una.'}
               </div>
-              <button className="primary full" type="submit" disabled={busy || !imageForm.productId || imageForm.files.length === 0}>
+              <button className="primary full" type="submit" disabled={isAdminProductMutating(imageForm.productId) || !imageForm.productId || imageForm.files.length === 0}>
                 <ImageUp size={18} /> Subir archivo
               </button>
             </form>
@@ -1045,7 +1182,7 @@ export function AdminView({ state, actions }) {
             <form className="nested-admin-form url-image-form" onSubmit={actions.saveImageUrl}>
               <label>URL de imagen<input type="url" value={imageForm.imageUrl} onChange={updateImage('imageUrl')} placeholder="https://..." /></label>
               <label>Nombre de imagen<input value={imageForm.imageName} onChange={updateImage('imageName')} placeholder="Ej. Foto principal del producto" /></label>
-              <button className="secondary full" type="submit" disabled={busy || !imageForm.productId || !imageForm.imageUrl.trim()}>
+              <button className="secondary full" type="submit" disabled={isAdminProductMutating(imageForm.productId) || !imageForm.productId || !imageForm.imageUrl.trim()}>
                 <Link size={18} /> Guardar URL
               </button>
             </form>

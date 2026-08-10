@@ -55,6 +55,17 @@ function normalizePositiveInteger(value, fallback, maximum = Number.MAX_SAFE_INT
   return Math.min(parsed, maximum);
 }
 
+function getAdminProductId(product) {
+  const value = product?._id ?? product?.id;
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (Number.isSafeInteger(value) && value >= 0) return String(value);
+  return '';
+}
+
+function invalidAdminProductsResponse() {
+  return new Error('El inventario administrativo devolvió una respuesta no válida.');
+}
+
 function buildAdminProductsQuery({
   page = 1,
   limit = 50,
@@ -87,21 +98,43 @@ function buildAdminProductsQuery({
   return query;
 }
 
-function normalizeAdminProductsResponse(result) {
+function normalizeAdminProductsResponse(result, requestedPage, requestedLimit) {
   const pagination = result?.pagination;
-  const total = Number(pagination?.total);
-  const page = Number(pagination?.page);
-  const limit = Number(pagination?.limit);
-  const totalPages = Number(pagination?.totalPages);
-  const hasCanonicalPagination = [total, page, limit, totalPages]
-    .every((value) => Number.isSafeInteger(value) && value >= 0)
+  const total = pagination?.total;
+  const page = pagination?.page;
+  const limit = pagination?.limit;
+  const totalPages = pagination?.totalPages;
+  const expectedTotalPages = Number.isSafeInteger(total) && Number.isSafeInteger(limit) && limit > 0
+    ? Math.ceil(total / limit)
+    : -1;
+  const hasCanonicalPagination = Number.isSafeInteger(total)
+    && total >= 0
+    && Number.isSafeInteger(page)
     && page >= 1
+    && Number.isSafeInteger(limit)
     && limit >= 1
-    && limit <= 100;
+    && limit <= 100
+    && Number.isSafeInteger(totalPages)
+    && totalPages >= 0
+    && page === requestedPage
+    && limit === requestedLimit
+    && totalPages === expectedTotalPages
+    && (total === 0 ? page === 1 && totalPages === 0 : page <= totalPages);
 
   if (!Array.isArray(result?.data) || !hasCanonicalPagination) {
-    throw new Error('El inventario administrativo devolvió una respuesta no válida.');
+    throw invalidAdminProductsResponse();
   }
+
+  const ids = result.data.map(getAdminProductId);
+  const maximumPageLength = total === 0
+    ? 0
+    : Math.min(limit, Math.max(0, total - ((page - 1) * limit)));
+  if (
+    result.data.length > limit
+    || result.data.length !== maximumPageLength
+    || ids.some((id) => !id)
+    || new Set(ids).size !== ids.length
+  ) throw invalidAdminProductsResponse();
 
   return {
     data: result.data,
@@ -109,12 +142,56 @@ function normalizeAdminProductsResponse(result) {
   };
 }
 
+function normalizeAdminProductMutationResponse(result, expectedProductId = '') {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('La mutación del producto devolvió una respuesta no válida.');
+  }
+  const productId = getAdminProductId(result);
+  if (!productId || (expectedProductId && productId !== String(expectedProductId))) {
+    throw new Error('La mutación del producto devolvió una respuesta no válida.');
+  }
+  return result;
+}
+
+function normalizeAdminProductDeleteResponse(result) {
+  if (
+    !result
+    || typeof result !== 'object'
+    || Array.isArray(result)
+    || result.message !== 'Product deleted successfully'
+    || Object.keys(result).length !== 1
+  ) throw new Error('La eliminación del producto devolvió una respuesta no válida.');
+  return result;
+}
+
 export const adminModel = {
   async listProducts(request, options = {}) {
     const { signal, ...filters } = options;
+    const requestedPage = filters.page === undefined ? 1 : Number(filters.page);
+    const requestedLimit = filters.limit === undefined ? 50 : Number(filters.limit);
+    const minPrice = filters.minPrice === '' || filters.minPrice == null
+      ? null
+      : Number(filters.minPrice);
+    const maxPrice = filters.maxPrice === '' || filters.maxPrice == null
+      ? null
+      : Number(filters.maxPrice);
+    const hasInvalidFilters = !Number.isSafeInteger(requestedPage)
+      || requestedPage < 1
+      || !Number.isSafeInteger(requestedLimit)
+      || requestedLimit < 1
+      || requestedLimit > 100
+      || (filters.inStock !== undefined && typeof filters.inStock !== 'boolean')
+      || (minPrice !== null && (!Number.isFinite(minPrice) || minPrice < 0))
+      || (maxPrice !== null && (!Number.isFinite(maxPrice) || maxPrice < 0))
+      || (minPrice !== null && maxPrice !== null && minPrice > maxPrice)
+      || (filters.sort && !['name', 'price', 'stock', 'createdAt'].includes(filters.sort))
+      || (filters.order && !['asc', 'desc'].includes(filters.order));
+    if (hasInvalidFilters) {
+      throw new Error('Los parámetros del inventario administrativo no son válidos.');
+    }
     const query = buildAdminProductsQuery(filters);
     const result = await request('/products/admin/all?' + query.toString(), { signal });
-    return normalizeAdminProductsResponse(result);
+    return normalizeAdminProductsResponse(result, requestedPage, requestedLimit);
   },
 
   async listUsers(request) {
@@ -181,32 +258,36 @@ export const adminModel = {
     return request('/categories/' + categoryId, { method: 'DELETE' });
   },
 
-  createProduct(request, form) {
-    return request('/products', {
+  async createProduct(request, form) {
+    const result = await request('/products', {
       method: 'POST',
       body: JSON.stringify(buildProductPayload(form)),
     });
+    return normalizeAdminProductMutationResponse(result);
   },
 
-  updateProduct(request, productId, form) {
-    return request('/products/' + productId, {
+  async updateProduct(request, productId, form) {
+    const result = await request('/products/' + productId, {
       method: 'PATCH',
       body: JSON.stringify(buildProductPayload(form)),
     });
+    return normalizeAdminProductMutationResponse(result, productId);
   },
 
-  deleteProduct(request, productId) {
-    return request('/products/' + productId, { method: 'DELETE' });
+  async deleteProduct(request, productId) {
+    const result = await request('/products/' + productId, { method: 'DELETE' });
+    return normalizeAdminProductDeleteResponse(result);
   },
 
-  uploadProductImages(request, productId, files) {
+  async uploadProductImages(request, productId, files) {
     const formData = new FormData();
     files.slice(0, 5).forEach((file) => formData.append('images', file));
 
-    return request('/products/' + productId + '/images', {
+    const result = await request('/products/' + productId + '/images', {
       method: 'POST',
       body: formData,
     });
+    return normalizeAdminProductMutationResponse(result, productId);
   },
 
   uploadHomeImages(request, files) {
@@ -219,18 +300,20 @@ export const adminModel = {
     });
   },
 
-  saveImageUrl(request, product, imageUrl, imageName) {
+  async saveImageUrl(request, product, imageUrl, imageName) {
     const currentImages = Array.isArray(product.images) ? product.images : [];
     const nextImage = {
       url: imageUrl.trim(),
       name: imageName.trim() || 'Imagen del producto',
     };
 
-    return request('/products/' + (product._id || product.id), {
+    const productId = getAdminProductId(product);
+    const result = await request('/products/' + productId, {
       method: 'PATCH',
       body: JSON.stringify({
         images: [...currentImages, nextImage].slice(-5),
       }),
     });
+    return normalizeAdminProductMutationResponse(result, productId);
   },
 };

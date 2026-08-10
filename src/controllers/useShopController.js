@@ -65,11 +65,76 @@ const initialAdminSearch = {
 
 const ADMIN_PRODUCTS_DEFAULT_LIMIT = 50;
 const ADMIN_PRODUCTS_LIMIT_OPTIONS = [10, 50, 100];
+const ADMIN_PRODUCTS_SORT_OPTIONS = ['name', 'price', 'stock', 'createdAt'];
+const ADMIN_PRODUCTS_ORDER_OPTIONS = ['asc', 'desc'];
 const ADMIN_PRODUCTS_LOAD_TIMEOUT_MS = 10000;
+
+const initialAdminProductsFilters = {
+  categoryId: '',
+  inStock: '',
+  minPrice: '',
+  maxPrice: '',
+  sort: 'createdAt',
+  order: 'desc',
+};
 
 function normalizeAdminProductsPage(value, fallback = 1) {
   const parsed = Number.parseInt(value, 10);
   return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : fallback;
+}
+
+function normalizeAdminProductsPrice(value, fieldLabel) {
+  if (value === '' || value === undefined || value === null) return '';
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(fieldLabel + ' debe ser un número igual o mayor que cero.');
+  }
+  return parsed;
+}
+
+function normalizeAdminProductsRequest(sessionContext, values = {}) {
+  const limit = Number(values.limit);
+  const normalizedLimit = ADMIN_PRODUCTS_LIMIT_OPTIONS.includes(limit)
+    ? limit
+    : ADMIN_PRODUCTS_DEFAULT_LIMIT;
+  const minPrice = normalizeAdminProductsPrice(values.minPrice, 'El precio mínimo');
+  const maxPrice = normalizeAdminProductsPrice(values.maxPrice, 'El precio máximo');
+  if (minPrice !== '' && maxPrice !== '' && minPrice > maxPrice) {
+    throw new Error('El precio mínimo no puede superar el precio máximo.');
+  }
+
+  return Object.freeze({
+    generation: sessionContext?.generation ?? null,
+    ownerKey: sessionContext?.ownerKey || '',
+    role: 'admin',
+    page: normalizeAdminProductsPage(values.page),
+    limit: normalizedLimit,
+    query: String(values.query || '').trim(),
+    categoryId: String(values.categoryId || '').trim(),
+    inStock: values.inStock === true || values.inStock === 'true',
+    minPrice,
+    maxPrice,
+    sort: ADMIN_PRODUCTS_SORT_OPTIONS.includes(values.sort) ? values.sort : 'createdAt',
+    order: ADMIN_PRODUCTS_ORDER_OPTIONS.includes(values.order) ? values.order : 'desc',
+  });
+}
+
+function getAdminProductsRequestSignature(context) {
+  if (!context) return '';
+  return JSON.stringify([
+    context.generation,
+    context.ownerKey,
+    context.role,
+    context.page,
+    context.limit,
+    context.query,
+    context.categoryId,
+    context.inStock,
+    context.minPrice,
+    context.maxPrice,
+    context.sort,
+    context.order,
+  ]);
 }
 
 function getAdminProductsLoadError(error) {
@@ -461,6 +526,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const [adminProductsLoading, setAdminProductsLoading] = useState(false);
   const [adminProductsError, setAdminProductsError] = useState('');
   const [adminProductsQuery, setAdminProductsQuery] = useState('');
+  const [adminProductsFilters, setAdminProductsFilters] = useState(() => ({ ...initialAdminProductsFilters }));
+  const [adminProductsDisplayedContext, setAdminProductsDisplayedContext] = useState(null);
+  const [adminProductsStale, setAdminProductsStale] = useState(false);
+  const [adminProductsFocusTarget, setAdminProductsFocusTarget] = useState(null);
+  const [adminProductsFormResetVersion, setAdminProductsFormResetVersion] = useState(0);
+  const [adminProductMutationKeys, setAdminProductMutationKeys] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUserForm, setAdminUserForm] = useState(() => ({ ...initialAdminUserForm }));
   const [selectedAdminUserId, setSelectedAdminUserId] = useState('');
@@ -493,8 +564,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const productReviewSubmittingKeysRef = useRef(new Set());
   const adminProductsLoadSequenceRef = useRef(0);
   const adminProductsAbortControllerRef = useRef(null);
+  const adminProductsContextRef = useRef(null);
+  const adminProductsSnapshotRef = useRef(null);
+  const adminProductMutationLocksRef = useRef(new Map());
 
   useEffect(() => {
+    const adminProductMutationLocks = adminProductMutationLocksRef.current;
     if (!activeSessionRef.current) {
       invalidateSessionGeneration();
     } else {
@@ -508,6 +583,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       adminProductsLoadSequenceRef.current += 1;
       adminProductsAbortControllerRef.current?.abort();
       adminProductsAbortControllerRef.current = null;
+      adminProductsContextRef.current = null;
+      adminProductsSnapshotRef.current = null;
+      adminProductMutationLocks.clear();
       activeSessionGenerationRef.current = null;
     };
   }, []);
@@ -581,6 +659,42 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     return Object.freeze({ generation, ownerKey });
   };
 
+  const purgeAdministrativeState = () => {
+    adminProductsLoadSequenceRef.current += 1;
+    adminProductsAbortControllerRef.current?.abort();
+    adminProductsAbortControllerRef.current = null;
+    adminProductsContextRef.current = null;
+    adminProductsSnapshotRef.current = null;
+    adminProductMutationLocksRef.current.clear();
+    setAdminProducts([]);
+    setAdminProductsPage(1);
+    setAdminProductsLimitState(ADMIN_PRODUCTS_DEFAULT_LIMIT);
+    setAdminProductsTotal(0);
+    setAdminProductsTotalPages(0);
+    setAdminProductsLoading(false);
+    setAdminProductsError('');
+    setAdminProductsQuery('');
+    setAdminProductsFilters({ ...initialAdminProductsFilters });
+    setAdminProductsDisplayedContext(null);
+    setAdminProductsStale(false);
+    setAdminProductsFocusTarget(null);
+    setAdminProductsFormResetVersion((version) => version + 1);
+    setAdminProductMutationKeys([]);
+    setAdminSearchState({ ...initialAdminSearch });
+    setAdminUsers([]);
+    setAdminReviews([]);
+    setAdminUserForm({ ...initialAdminUserForm });
+    setSelectedAdminUserId('');
+    setSelectedAdminOrderId('');
+    setSelectedAdminProductId('');
+    setSelectedAdminCategoryId('');
+    setCategoryForm({ ...initialCategoryForm });
+    setProductForm({ ...initialProductForm });
+    setImageForm({ ...initialImageForm });
+    setHomeComponentForm({ ...initialHomeComponentForm });
+    setAdminTab('users');
+  };
+
   const applySession = (nextSession, nextGeneration) => {
     const currentOwnerKey = getSessionOwnerKey(activeSessionRef.current);
     const nextOwnerKey = getSessionOwnerKey(nextSession);
@@ -604,13 +718,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       cancellingOrderIdsRef.current.clear();
       skipOrderSessionReloadRef.current = false;
       productReviewSubmittingKeysRef.current.clear();
-      adminProductsLoadSequenceRef.current += 1;
-      adminProductsAbortControllerRef.current?.abort();
-      adminProductsAbortControllerRef.current = null;
+      purgeAdministrativeState();
       setCart(null);
       setOrders([]);
       setMyReviews([]);
-      setAdminReviews([]);
       setReviewForm({ ...emptyReviewForm });
       setProductReviewErrors({});
       setProductReviewFeedback('');
@@ -618,25 +729,12 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setProductReviewFocusTarget(null);
       setProductReviewSubmitting(false);
       productReviewFormContextRef.current = '';
-      setAdminProducts([]);
-      setAdminProductsPage(1);
-      setAdminProductsLimitState(ADMIN_PRODUCTS_DEFAULT_LIMIT);
-      setAdminProductsTotal(0);
-      setAdminProductsTotalPages(0);
-      setAdminProductsLoading(false);
-      setAdminProductsError('');
-      setAdminProductsQuery('');
-      setAdminSearchState({ ...initialAdminSearch });
-      setAdminUsers([]);
       setCancellingOrderIds([]);
       setOrderCancellationErrors({});
       setOrderCancellationFocusTarget(null);
       setSelectedAccountReviewId('');
-      setSelectedAdminUserId('');
-      setSelectedAdminOrderId('');
-      setSelectedAdminProductId('');
-      setSelectedAdminCategoryId('');
       setCheckoutSubmitting(false);
+      setNotice('');
       setBusy(false);
     }
     activeSessionRef.current = nextSession;
@@ -788,16 +886,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       skipCheckoutSessionReloadRef.current = false;
       skipOrderSessionReloadRef.current = false;
       if (session.user?.role !== 'admin') {
-        adminProductsLoadSequenceRef.current += 1;
-        adminProductsAbortControllerRef.current?.abort();
-        adminProductsAbortControllerRef.current = null;
-        setAdminProducts([]);
-        setAdminProductsPage(1);
-        setAdminProductsTotal(0);
-        setAdminProductsTotalPages(0);
-        setAdminProductsLoading(false);
-        setAdminProductsError('');
-        setAdminProductsQuery('');
+        purgeAdministrativeState();
       }
       if (!skipCheckoutSessionReload) {
         loadCart();
@@ -823,25 +912,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setReviewForm({ ...emptyReviewForm });
       setAccountReviewForm({ ...emptyReviewForm });
       setSelectedAccountReviewId('');
-      adminProductsLoadSequenceRef.current += 1;
-      adminProductsAbortControllerRef.current?.abort();
-      adminProductsAbortControllerRef.current = null;
-      setAdminProducts([]);
-      setAdminProductsPage(1);
-      setAdminProductsLimitState(ADMIN_PRODUCTS_DEFAULT_LIMIT);
-      setAdminProductsTotal(0);
-      setAdminProductsTotalPages(0);
-      setAdminProductsLoading(false);
-      setAdminProductsError('');
-      setAdminProductsQuery('');
-      setAdminUsers([]);
-      setAdminUserForm({ ...initialAdminUserForm });
-      setSelectedAdminUserId('');
-      setSelectedAdminOrderId('');
-      setSelectedAdminProductId('');
-      setSelectedAdminCategoryId('');
-      setAdminTab('users');
-      setAdminSearchState({ ...initialAdminSearch });
+      purgeAdministrativeState();
       if (!preserveCheckoutDraft) {
         setCheckoutStep('items');
         setShippingForm(getShippingDefaults(null));
@@ -1018,21 +1089,62 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  const syncAdminProductsRequestState = (requestContext) => {
+    setAdminProductsPage(requestContext.page);
+    setAdminProductsLimitState(requestContext.limit);
+    setAdminProductsQuery(requestContext.query);
+    setAdminProductsFilters({
+      categoryId: requestContext.categoryId,
+      inStock: requestContext.inStock ? 'true' : '',
+      minPrice: requestContext.minPrice,
+      maxPrice: requestContext.maxPrice,
+      sort: requestContext.sort,
+      order: requestContext.order,
+    });
+  };
+
+  const isAdminProductsRequestCurrent = (sessionContext, requestSignature, loadSequence) => (
+    isAdminSessionContextCurrent(sessionContext)
+    && adminProductsLoadSequenceRef.current === loadSequence
+    && getAdminProductsRequestSignature(adminProductsContextRef.current) === requestSignature
+  );
+
   async function loadAdminProducts(
     sessionContext = captureSessionContext(),
-    {
-      page: requestedPage = adminProductsPage,
-      limit: requestedLimit = adminProductsLimit,
-      query: requestedQuery = adminProductsQuery,
-    } = {},
+    requestedValues = null,
+    { intent = 'refresh' } = {},
   ) {
     if (!isAdminSessionContextCurrent(sessionContext)) return null;
 
-    const pageToLoad = normalizeAdminProductsPage(requestedPage);
-    const limitToLoad = ADMIN_PRODUCTS_LIMIT_OPTIONS.includes(Number(requestedLimit))
-      ? Number(requestedLimit)
-      : ADMIN_PRODUCTS_DEFAULT_LIMIT;
-    const queryToLoad = String(requestedQuery || '').trim();
+    let requestContext;
+    try {
+      const currentContext = adminProductsContextRef.current;
+      const baseContext = currentContext
+        && currentContext.generation === sessionContext.generation
+        && currentContext.ownerKey === sessionContext.ownerKey
+        ? currentContext
+        : {
+          page: adminProductsPage,
+          limit: adminProductsLimit,
+          query: adminProductsQuery,
+          ...adminProductsFilters,
+        };
+      requestContext = normalizeAdminProductsRequest(sessionContext, {
+        ...baseContext,
+        ...(requestedValues || {}),
+      });
+    } catch (error) {
+      if (isAdminSessionContextCurrent(sessionContext)) {
+        setAdminProductsError(error.message);
+        setAdminProductsStale(Boolean(adminProductsSnapshotRef.current));
+      }
+      return null;
+    }
+
+    const requestSignature = getAdminProductsRequestSignature(requestContext);
+    adminProductsContextRef.current = requestContext;
+    syncAdminProductsRequestState(requestContext);
+
     const loadSequence = adminProductsLoadSequenceRef.current + 1;
     adminProductsLoadSequenceRef.current = loadSequence;
     adminProductsAbortControllerRef.current?.abort();
@@ -1044,45 +1156,54 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     );
     const sessionRequest = createSessionRequest(sessionContext);
 
-    setAdminProducts([]);
     setAdminProductsLoading(true);
     setAdminProductsError('');
+    setAdminProductsStale(false);
 
     try {
       const result = await adminModel.listProducts(sessionRequest, {
-        page: pageToLoad,
-        limit: limitToLoad,
-        search: queryToLoad,
+        page: requestContext.page,
+        limit: requestContext.limit,
+        search: requestContext.query,
+        categoryId: requestContext.categoryId,
+        inStock: requestContext.inStock,
+        minPrice: requestContext.minPrice,
+        maxPrice: requestContext.maxPrice,
+        sort: requestContext.sort,
+        order: requestContext.order,
         signal: abortController.signal,
       });
-      if (
-        !isAdminSessionContextCurrent(sessionContext)
-        || adminProductsLoadSequenceRef.current !== loadSequence
-      ) return null;
+      if (!isAdminProductsRequestCurrent(sessionContext, requestSignature, loadSequence)) return null;
 
-      const { pagination: nextPagination } = result;
-      if (nextPagination.totalPages > 0 && nextPagination.page > nextPagination.totalPages) {
-        setAdminProductsPage(nextPagination.totalPages);
-        return loadAdminProducts(sessionContext, {
-          page: nextPagination.totalPages,
-          limit: limitToLoad,
-          query: queryToLoad,
-        });
-      }
-
+      const snapshot = Object.freeze({
+        data: result.data,
+        pagination: result.pagination,
+        context: requestContext,
+        signature: requestSignature,
+      });
+      adminProductsSnapshotRef.current = snapshot;
       setAdminProducts(result.data);
-      setAdminProductsPage(nextPagination.totalPages === 0 ? 1 : nextPagination.page);
-      setAdminProductsLimitState(nextPagination.limit);
-      setAdminProductsTotal(nextPagination.total);
-      setAdminProductsTotalPages(nextPagination.totalPages);
+      setAdminProductsTotal(result.pagination.total);
+      setAdminProductsTotalPages(result.pagination.totalPages);
+      setAdminProductsDisplayedContext(requestContext);
+      setAdminProductsStale(false);
+      if (intent === 'pagination') {
+        setAdminProductsFocusTarget((current) => ({
+          page: result.pagination.page,
+          totalPages: result.pagination.totalPages,
+          total: result.pagination.total,
+          version: Number(current?.version || 0) + 1,
+        }));
+      }
       return result;
     } catch (error) {
-      if (
-        isAdminSessionContextCurrent(sessionContext)
-        && adminProductsLoadSequenceRef.current === loadSequence
-      ) {
-        setAdminProducts([]);
+      if ((error?.status === 401 || error?.status === 403) && isSessionContextCurrent(sessionContext)) {
+        endLogicalSession(sessionContext);
+        return null;
+      }
+      if (isAdminProductsRequestCurrent(sessionContext, requestSignature, loadSequence)) {
         setAdminProductsError(getAdminProductsLoadError(error));
+        setAdminProductsStale(Boolean(adminProductsSnapshotRef.current));
       }
       return null;
     } finally {
@@ -1090,10 +1211,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       if (adminProductsAbortControllerRef.current === abortController) {
         adminProductsAbortControllerRef.current = null;
       }
-      if (
-        isAdminSessionContextCurrent(sessionContext)
-        && adminProductsLoadSequenceRef.current === loadSequence
-      ) {
+      if (isAdminProductsRequestCurrent(sessionContext, requestSignature, loadSequence)) {
         setAdminProductsLoading(false);
       }
     }
@@ -1974,79 +2092,107 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setAdminSearchState((current) => ({ ...current, [key]: value }));
   };
 
-  const goToAdminProductsPage = (nextPage) => {
-    if (adminProductsLoading || adminProductsTotalPages === 0) return;
-    const normalizedPage = Math.min(
-      adminProductsTotalPages,
-      normalizeAdminProductsPage(nextPage, adminProductsPage),
-    );
-    if (normalizedPage === adminProductsPage) return;
-    const sessionContext = captureSessionContext();
-    if (!isAdminSessionContextCurrent(sessionContext)) return;
-    setAdminProductsPage(normalizedPage);
-    void loadAdminProducts(sessionContext, {
-      page: normalizedPage,
+  const getCurrentAdminProductsContext = (sessionContext) => {
+    const current = adminProductsContextRef.current;
+    if (
+      current
+      && current.generation === sessionContext?.generation
+      && current.ownerKey === sessionContext?.ownerKey
+    ) return current;
+    return normalizeAdminProductsRequest(sessionContext, {
+      page: adminProductsPage,
       limit: adminProductsLimit,
       query: adminProductsQuery,
+      ...adminProductsFilters,
     });
+  };
+
+  const requestAdminProductsChange = (changes, intent = 'query') => {
+    const sessionContext = captureSessionContext();
+    if (!isAdminSessionContextCurrent(sessionContext)) return;
+    let currentContext;
+    try {
+      currentContext = getCurrentAdminProductsContext(sessionContext);
+    } catch (error) {
+      setAdminProductsError(error.message);
+      return;
+    }
+    void loadAdminProducts(sessionContext, { ...currentContext, ...changes }, { intent });
+  };
+
+  const goToAdminProductsPage = (nextPage) => {
+    if (adminProductsTotalPages === 0) return;
+    const currentPage = adminProductsContextRef.current?.page || adminProductsPage;
+    const normalizedPage = Math.min(
+      adminProductsTotalPages,
+      normalizeAdminProductsPage(nextPage, currentPage),
+    );
+    if (normalizedPage === currentPage) return;
+    requestAdminProductsChange({ page: normalizedPage }, 'pagination');
   };
 
   const changeAdminProductsLimit = (value) => {
     const nextLimit = Number(value);
-    if (
-      adminProductsLoading
-      || !ADMIN_PRODUCTS_LIMIT_OPTIONS.includes(nextLimit)
-      || nextLimit === adminProductsLimit
-    ) return;
-    const sessionContext = captureSessionContext();
-    if (!isAdminSessionContextCurrent(sessionContext)) return;
-    setAdminProductsLimitState(nextLimit);
-    setAdminProductsPage(1);
-    void loadAdminProducts(sessionContext, {
-      page: 1,
-      limit: nextLimit,
-      query: adminProductsQuery,
-    });
+    if (!ADMIN_PRODUCTS_LIMIT_OPTIONS.includes(nextLimit)) {
+      setAdminProductsError('El límite solicitado no es válido.');
+      return;
+    }
+    if (nextLimit === (adminProductsContextRef.current?.limit || adminProductsLimit)) return;
+    requestAdminProductsChange({ page: 1, limit: nextLimit });
   };
 
   const applyAdminProductsSearch = (event) => {
     event?.preventDefault();
-    if (adminProductsLoading) return;
     const nextQuery = String(adminSearch.products || '').trim();
-    const sessionContext = captureSessionContext();
-    if (!isAdminSessionContextCurrent(sessionContext)) return;
-    setAdminProductsQuery(nextQuery);
-    setAdminProductsPage(1);
-    void loadAdminProducts(sessionContext, {
-      page: 1,
-      limit: adminProductsLimit,
-      query: nextQuery,
-    });
+    requestAdminProductsChange({ page: 1, query: nextQuery });
   };
 
   const clearAdminProductsSearch = () => {
-    if (adminProductsLoading) return;
-    const sessionContext = captureSessionContext();
-    if (!isAdminSessionContextCurrent(sessionContext)) return;
     setAdminSearchState((current) => ({ ...current, products: '' }));
-    setAdminProductsQuery('');
-    setAdminProductsPage(1);
-    void loadAdminProducts(sessionContext, {
-      page: 1,
-      limit: adminProductsLimit,
-      query: '',
-    });
+    requestAdminProductsChange({ page: 1, query: '' });
+  };
+
+  const setAdminProductsFilterValue = (field, value) => {
+    if (!Object.hasOwn(initialAdminProductsFilters, field)) return;
+    setAdminProductsFilters((current) => ({ ...current, [field]: value }));
+  };
+
+  const changeAdminProductsFilter = (field, value) => {
+    if (!['categoryId', 'inStock', 'sort', 'order'].includes(field)) return;
+    if (field === 'categoryId' && value && !categories.some((category) => String(category._id || category.id) === value)) {
+      setAdminProductsError('La categoría seleccionada no es válida.');
+      return;
+    }
+    if (field === 'inStock' && !['', 'true'].includes(value)) {
+      setAdminProductsError('El filtro de stock no es válido.');
+      return;
+    }
+    if (field === 'sort' && !ADMIN_PRODUCTS_SORT_OPTIONS.includes(value)) {
+      setAdminProductsError('El criterio de ordenación no es válido.');
+      return;
+    }
+    if (field === 'order' && !ADMIN_PRODUCTS_ORDER_OPTIONS.includes(value)) {
+      setAdminProductsError('La dirección de ordenación no es válida.');
+      return;
+    }
+    setAdminProductsFilters((current) => ({ ...current, [field]: value }));
+    requestAdminProductsChange({ page: 1, [field]: value });
+  };
+
+  const applyAdminProductsFilters = (event) => {
+    event?.preventDefault();
+    requestAdminProductsChange({ page: 1, ...adminProductsFilters });
+  };
+
+  const clearAdminProductsFilters = () => {
+    setAdminProductsFilters({ ...initialAdminProductsFilters });
+    requestAdminProductsChange({ page: 1, ...initialAdminProductsFilters });
   };
 
   const retryAdminProducts = () => {
-    if (adminProductsLoading) return;
     const sessionContext = captureSessionContext();
     if (!isAdminSessionContextCurrent(sessionContext)) return;
-    void loadAdminProducts(sessionContext, {
-      page: adminProductsPage,
-      limit: adminProductsLimit,
-      query: adminProductsQuery,
-    });
+    void loadAdminProducts(sessionContext, getCurrentAdminProductsContext(sessionContext));
   };
 
   function selectAdminCategory(category) {
@@ -2232,26 +2378,47 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }
 
   async function createProduct(event) {
-    event.preventDefault();
+    event?.preventDefault();
     const operationContext = captureSessionContext();
-    if (!operationContext) return;
+    if (!isAdminSessionContextCurrent(operationContext)) return;
+    const productId = selectedAdminProductId || '';
+    const entityKey = productId ? 'product:' + productId : 'create';
+    const lockKey = operationContext.generation + '|' + operationContext.ownerKey + '|' + entityKey;
+    if (adminProductMutationLocksRef.current.has(lockKey)) return;
+    const lockToken = Symbol(entityKey);
+    adminProductMutationLocksRef.current.set(lockKey, { token: lockToken, entityKey });
+    setAdminProductMutationKeys(Array.from(
+      adminProductMutationLocksRef.current.values(),
+      (lock) => lock.entityKey,
+    ));
     const operationRequest = createSessionRequest(operationContext);
-    setBusy(true);
     try {
-      const saved = selectedAdminProductId
-        ? await adminModel.updateProduct(operationRequest, selectedAdminProductId, productForm)
-        : await adminModel.createProduct(operationRequest, productForm);
+      await (productId
+        ? adminModel.updateProduct(operationRequest, productId, productForm)
+        : adminModel.createProduct(operationRequest, productForm));
       if (!isAdminSessionContextCurrent(operationContext)) return;
-      setImageForm((current) => ({ ...current, productId: saved._id || saved.id || '' }));
       resetProductForm();
-      await loadAdminProducts(operationContext);
+      const latestContext = adminProductsContextRef.current;
+      if (!latestContext || latestContext.generation !== operationContext.generation) return;
+      await loadAdminProducts(operationContext, latestContext);
       if (isAdminSessionContextCurrent(operationContext)) {
-        setNotice(selectedAdminProductId ? 'Producto actualizado correctamente.' : 'Producto creado correctamente.');
+        setNotice(productId ? 'Producto actualizado correctamente.' : 'Producto creado correctamente.');
       }
     } catch (error) {
-      if (isAdminSessionContextCurrent(operationContext)) setNotice(error.message);
+      if ((error?.status === 401 || error?.status === 403) && isSessionContextCurrent(operationContext)) {
+        endLogicalSession(operationContext);
+      } else if (isAdminSessionContextCurrent(operationContext)) {
+        setNotice(error.message);
+      }
     } finally {
-      if (isAdminSessionContextCurrent(operationContext)) setBusy(false);
+      const activeLock = adminProductMutationLocksRef.current.get(lockKey);
+      if (activeLock?.token === lockToken) {
+        adminProductMutationLocksRef.current.delete(lockKey);
+        setAdminProductMutationKeys(Array.from(
+          adminProductMutationLocksRef.current.values(),
+          (lock) => lock.entityKey,
+        ));
+      }
     }
   }
 
@@ -2260,21 +2427,55 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     if (!productId) return;
 
     const operationContext = captureSessionContext();
-    if (!operationContext) return;
+    if (!isAdminSessionContextCurrent(operationContext)) return;
+    const entityKey = 'product:' + productId;
+    const lockKey = operationContext.generation + '|' + operationContext.ownerKey + '|' + entityKey;
+    if (adminProductMutationLocksRef.current.has(lockKey)) return;
+    const lockToken = Symbol(entityKey);
+    adminProductMutationLocksRef.current.set(lockKey, { token: lockToken, entityKey });
+    setAdminProductMutationKeys(Array.from(
+      adminProductMutationLocksRef.current.values(),
+      (lock) => lock.entityKey,
+    ));
     const operationRequest = createSessionRequest(operationContext);
-    setBusy(true);
     try {
       await adminModel.deleteProduct(operationRequest, productId);
       if (!isAdminSessionContextCurrent(operationContext)) return;
       if (selectedAdminProductId === productId) resetProductForm();
-      await loadAdminProducts(operationContext);
+      let latestContext = adminProductsContextRef.current;
+      const snapshot = adminProductsSnapshotRef.current;
+      if (!latestContext || latestContext.generation !== operationContext.generation) return;
+      if (
+        snapshot
+        && snapshot.signature === getAdminProductsRequestSignature(latestContext)
+        && snapshot.data.length === 1
+        && String(snapshot.data[0]?._id || snapshot.data[0]?.id) === String(productId)
+        && latestContext.page > 1
+      ) {
+        latestContext = normalizeAdminProductsRequest(operationContext, {
+          ...latestContext,
+          page: latestContext.page - 1,
+        });
+      }
+      await loadAdminProducts(operationContext, latestContext);
       if (isAdminSessionContextCurrent(operationContext)) {
         setNotice('Producto eliminado correctamente.');
       }
     } catch (error) {
-      if (isAdminSessionContextCurrent(operationContext)) setNotice(error.message);
+      if ((error?.status === 401 || error?.status === 403) && isSessionContextCurrent(operationContext)) {
+        endLogicalSession(operationContext);
+      } else if (isAdminSessionContextCurrent(operationContext)) {
+        setNotice(error.message);
+      }
     } finally {
-      if (isAdminSessionContextCurrent(operationContext)) setBusy(false);
+      const activeLock = adminProductMutationLocksRef.current.get(lockKey);
+      if (activeLock?.token === lockToken) {
+        adminProductMutationLocksRef.current.delete(lockKey);
+        setAdminProductMutationKeys(Array.from(
+          adminProductMutationLocksRef.current.values(),
+          (lock) => lock.entityKey,
+        ));
+      }
     }
   }
 
@@ -2285,28 +2486,49 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
+    const productId = imageForm.productId;
+    const files = imageForm.files;
     const operationContext = captureSessionContext();
-    if (!operationContext) return;
+    if (!isAdminSessionContextCurrent(operationContext)) return;
+    const entityKey = 'product:' + productId;
+    const lockKey = operationContext.generation + '|' + operationContext.ownerKey + '|' + entityKey;
+    if (adminProductMutationLocksRef.current.has(lockKey)) return;
+    const lockToken = Symbol(entityKey);
+    adminProductMutationLocksRef.current.set(lockKey, { token: lockToken, entityKey });
+    setAdminProductMutationKeys(Array.from(
+      adminProductMutationLocksRef.current.values(),
+      (lock) => lock.entityKey,
+    ));
     const operationRequest = createSessionRequest(operationContext);
-    setBusy(true);
     try {
-      const updated = await adminModel.uploadProductImages(operationRequest, imageForm.productId, imageForm.files);
+      const updated = await adminModel.uploadProductImages(operationRequest, productId, files);
       if (!isAdminSessionContextCurrent(operationContext)) return;
-      setImageForm({ ...initialImageForm, productId: imageForm.productId });
+      setImageForm({ ...initialImageForm, productId });
       setProductForm((current) => ({
         ...current,
         images: Array.isArray(updated?.images) ? updated.images : current.images,
       }));
-      await loadAdminProducts(operationContext);
+      const latestContext = adminProductsContextRef.current;
+      if (!latestContext || latestContext.generation !== operationContext.generation) return;
+      await loadAdminProducts(operationContext, latestContext);
       if (isAdminSessionContextCurrent(operationContext)) setNotice('Imágenes subidas correctamente.');
     } catch (error) {
-      if (isAdminSessionContextCurrent(operationContext)) {
+      if ((error?.status === 401 || error?.status === 403) && isSessionContextCurrent(operationContext)) {
+        endLogicalSession(operationContext);
+      } else if (isAdminSessionContextCurrent(operationContext)) {
         setNotice(error.message === 'Internal server error'
           ? 'No se pudo subir el archivo. Revisa Cloudinary en el backend o usa una URL de imagen.'
           : error.message);
       }
     } finally {
-      if (isAdminSessionContextCurrent(operationContext)) setBusy(false);
+      const activeLock = adminProductMutationLocksRef.current.get(lockKey);
+      if (activeLock?.token === lockToken) {
+        adminProductMutationLocksRef.current.delete(lockKey);
+        setAdminProductMutationKeys(Array.from(
+          adminProductMutationLocksRef.current.values(),
+          (lock) => lock.entityKey,
+        ));
+      }
     }
   }
 
@@ -2318,20 +2540,44 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
+    const productId = imageForm.productId;
+    const imageUrl = imageForm.imageUrl;
+    const imageName = imageForm.imageName;
     const operationContext = captureSessionContext();
-    if (!operationContext) return;
+    if (!isAdminSessionContextCurrent(operationContext)) return;
+    const entityKey = 'product:' + productId;
+    const lockKey = operationContext.generation + '|' + operationContext.ownerKey + '|' + entityKey;
+    if (adminProductMutationLocksRef.current.has(lockKey)) return;
+    const lockToken = Symbol(entityKey);
+    adminProductMutationLocksRef.current.set(lockKey, { token: lockToken, entityKey });
+    setAdminProductMutationKeys(Array.from(
+      adminProductMutationLocksRef.current.values(),
+      (lock) => lock.entityKey,
+    ));
     const operationRequest = createSessionRequest(operationContext);
-    setBusy(true);
     try {
-      await adminModel.saveImageUrl(operationRequest, product, imageForm.imageUrl, imageForm.imageName);
+      await adminModel.saveImageUrl(operationRequest, product, imageUrl, imageName);
       if (!isAdminSessionContextCurrent(operationContext)) return;
-      setImageForm({ ...initialImageForm, productId: imageForm.productId });
-      await loadAdminProducts(operationContext);
+      setImageForm({ ...initialImageForm, productId });
+      const latestContext = adminProductsContextRef.current;
+      if (!latestContext || latestContext.generation !== operationContext.generation) return;
+      await loadAdminProducts(operationContext, latestContext);
       if (isAdminSessionContextCurrent(operationContext)) setNotice('Imagen guardada desde URL.');
     } catch (error) {
-      if (isAdminSessionContextCurrent(operationContext)) setNotice(error.message);
+      if ((error?.status === 401 || error?.status === 403) && isSessionContextCurrent(operationContext)) {
+        endLogicalSession(operationContext);
+      } else if (isAdminSessionContextCurrent(operationContext)) {
+        setNotice(error.message);
+      }
     } finally {
-      if (isAdminSessionContextCurrent(operationContext)) setBusy(false);
+      const activeLock = adminProductMutationLocksRef.current.get(lockKey);
+      if (activeLock?.token === lockToken) {
+        adminProductMutationLocksRef.current.delete(lockKey);
+        setAdminProductMutationKeys(Array.from(
+          adminProductMutationLocksRef.current.values(),
+          (lock) => lock.entityKey,
+        ));
+      }
     }
   }
 
@@ -2441,12 +2687,18 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       adminTab,
       adminProducts,
       adminProductsError,
+      adminProductsDisplayedContext,
+      adminProductsFilters,
+      adminProductsFocusTarget,
+      adminProductsFormResetVersion,
       adminProductsLimit,
       adminProductsLoading,
       adminProductsPage,
       adminProductsQuery,
+      adminProductsStale,
       adminProductsTotal,
       adminProductsTotalPages,
+      adminProductMutationKeys,
       adminSearch,
       adminReviews,
       accountReviewForm,
@@ -2510,8 +2762,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     actions: {
       addToCart,
       applyAdminProductsSearch,
+      applyAdminProductsFilters,
       changeAdminProductsLimit,
+      changeAdminProductsFilter,
       clearCart,
+      clearAdminProductsFilters,
       clearAdminProductsSearch,
       cancelOrder,
       createCategory,
@@ -2543,6 +2798,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAuthMode,
       setAdminTab,
       setAdminSearch,
+      setAdminProductsFilterValue,
       setFilter,
       openCommerceCategory,
       showFavorites,
