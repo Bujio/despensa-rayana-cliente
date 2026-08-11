@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import { useLocation } from 'react-router-dom';
 import { productModel } from '../models/productModel.js';
 import { formatProductName } from './viewFormatters.js';
@@ -123,7 +123,7 @@ function buildSeo(state, pathname) {
 export function SeoManager({ state }) {
   const location = useLocation();
 
-  useEffect(() => {
+  const updateSeo = useEffectEvent(() => {
     const seo = buildSeo(state, location.pathname);
     const canonical = window.location.origin + location.pathname;
     const absoluteImage = new URL(seo.image || DEFAULT_IMAGE, window.location.origin).href;
@@ -144,6 +144,10 @@ export function SeoManager({ state }) {
       name: SITE_NAME,
       url: window.location.origin,
     });
+  });
+
+  useEffect(() => {
+    updateSeo();
   }, [location.pathname, state.selectedProduct]);
 
   return null;

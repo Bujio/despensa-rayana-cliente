@@ -21,7 +21,7 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
   };
 
   return (
-    <article
+    <div
       className="product-card ecommerce-card"
       onClick={openProduct}
       onKeyDown={openProduct}
@@ -31,7 +31,10 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
     >
       <div className="product-media">
         {image && !imageFailed ? (
-          <img src={image} alt={product.name} loading="lazy" onError={() => setImageFailed(true)} />
+          <>
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onError handles a resource failure, not user interaction. */}
+            <img src={image} alt={product.name} loading="lazy" onError={() => setImageFailed(true)} />
+          </>
         ) : (
           <PackageSearch size={44} />
         )}
@@ -84,6 +87,6 @@ export function ProductCard({ product, busy, isFavorite = false, reservedBySku =
           </button>
         </div>
       </div>
-    </article>
+    </div>
   );
 }

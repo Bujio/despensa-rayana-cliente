@@ -16,7 +16,6 @@ import {
 
 export function createAdminControllerActions({
   adminProducts,
-  adminSearch,
   adminUserForm,
   categoryForm,
   imageForm,

@@ -13,7 +13,7 @@ const commerceSections = [
   'La Rayana',
 ];
 
-export function Header({ cartCount, busy, filters, session, view, onCommerceCategory, onFavorites, onLogout, onSearch, onViewChange }) {
+export function Header({ cartCount, busy, filters, session, onCommerceCategory, onFavorites, onLogout, onSearch, onViewChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -97,7 +97,19 @@ export function Header({ cartCount, busy, filters, session, view, onCommerceCate
         ))}
       </nav>
 
-      <div className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')} onClick={() => setMenuOpen(false)} />
+      <div
+        aria-label="Cerrar menú"
+        className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')}
+        onClick={() => setMenuOpen(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') {
+            event.preventDefault();
+            setMenuOpen(false);
+          }
+        }}
+        role="button"
+        tabIndex={menuOpen ? 0 : -1}
+      />
       <aside className={'mobile-menu' + (menuOpen ? ' open' : '')} aria-hidden={!menuOpen}>
         <div className="mobile-menu-head">
           <strong>La Despensa Rayana</strong>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import {
   apiRequest,
   beginSessionGeneration,
@@ -590,7 +590,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     };
   }, []);
 
-  const cartItems = cart?.items || [];
+  const cartItems = useMemo(() => cart?.items || [], [cart?.items]);
   const cartTotal = useMemo(
     () => cartItems.reduce((total, item) => total + Number(item.price || 0) * Number(item.quantity || item.count || 0), 0),
     [cartItems],
@@ -865,17 +865,25 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
+  const loadProductsForEffect = useEffectEvent(() => {
+    void loadProducts();
+  });
+
   useEffect(() => {
-    loadProducts();
+    loadProductsForEffect();
   }, [page, filters, favoriteIds]);
+
+  const loadRouteProductForEffect = useEffectEvent((productId) => {
+    void loadProductFromRoute(productId);
+  });
 
   useEffect(() => {
     if (routeView === 'product' && routeProductId) {
-      loadProductFromRoute(routeProductId);
+      loadRouteProductForEffect(routeProductId);
     }
   }, [routeView, routeProductId]);
 
-  useEffect(() => {
+  const synchronizeSessionResources = useEffectEvent(() => {
     if (session && !sessionGeneration) return;
     if (session) {
       const preserveCheckoutDraft = checkoutSubmittingRef.current || preserveCheckoutDraftRef.current;
@@ -923,6 +931,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         checkoutSubmittingRef.current = false;
       }
     }
+  });
+
+  useEffect(() => {
+    synchronizeSessionResources();
   }, [session?.accessToken, sessionGeneration]);
 
   async function loadCategories() {
@@ -1740,6 +1752,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   };
 
+  const applyCommerceCategoryFiltersForEffect = useEffectEvent((label) => {
+    applyCommerceCategoryFilters(label);
+  });
+
   const openCommerceCategory = (label) => {
     if (label === 'La Rayana') {
       setView('story');
@@ -1777,7 +1793,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
-    applyCommerceCategoryFilters(visual?.label || routeCategorySlug.replace(/-/g, ' '));
+    applyCommerceCategoryFiltersForEffect(visual?.label || routeCategorySlug.replace(/-/g, ' '));
   }, [routeView, routeCategorySlug, categories.length]);
 
   const toggleFavorite = (product) => {

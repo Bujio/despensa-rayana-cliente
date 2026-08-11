@@ -117,6 +117,7 @@ export function ProductView({ state, actions }) {
                   setSelectedImage(item.url);
                   setImageFailed(false);
                 }}>
+                  {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onError handles a resource failure, not user interaction. */}
                   <img
                     src={item.url}
                     alt={item.name || selectedProduct.name}
@@ -130,7 +131,10 @@ export function ProductView({ state, actions }) {
           )}
           <div className="product-detail-media">
             {image && !imageFailed ? (
-              <img src={image} alt={selectedProduct.name} onError={() => setImageFailed(true)} />
+              <>
+                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onError handles a resource failure, not user interaction. */}
+                <img src={image} alt={selectedProduct.name} onError={() => setImageFailed(true)} />
+              </>
             ) : (
               <PackageSearch size={64} />
             )}

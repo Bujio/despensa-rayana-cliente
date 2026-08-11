@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   BarChart3,
@@ -516,8 +516,12 @@ function SupplierDashboard({ state, actions }) {
   const active = products.filter((product) => product.status === 'published').length;
   const out = products.filter((product) => Number(product.stock || 0) === 0).length;
 
-  useEffect(() => {
+  const synchronizeStatusNotice = useEffectEvent(() => {
     setShowStatusNotice(!hasSeenSupplierStatusNotice(state.supplierProfile, state.session?.user, status));
+  });
+
+  useEffect(() => {
+    synchronizeStatusNotice();
   }, [
     state.supplierProfile?._id,
     state.supplierProfile?.id,
@@ -719,7 +723,7 @@ function SupplierProductForm({ state, actions }) {
   const canManageProducts = !['inactive', 'rejected'].includes(status);
   const product = useMemo(() => state.supplierProducts.find((item) => String(item._id || item.id) === String(productId)), [state.supplierProducts, productId]);
 
-  useEffect(() => {
+  const synchronizeProductForm = useEffectEvent(() => {
     if (isEdit && product) {
       actions.selectSupplierProduct(product);
       return;
@@ -729,6 +733,10 @@ function SupplierProductForm({ state, actions }) {
       return;
     }
     if (!isEdit) actions.resetSupplierProductForm();
+  });
+
+  useEffect(() => {
+    synchronizeProductForm();
   }, [isEdit, productId, product, state.session?.user?.role]);
 
   const updateProduct = (field) => (event) => actions.updateProductForm(field, event.target.value);
@@ -820,7 +828,7 @@ function SupplierOffers({ state, actions }) {
     offerValidUntil: '',
   });
 
-  useEffect(() => {
+  const synchronizeOfferForm = useEffectEvent(() => {
     if (!selectedProduct) return;
     const offer = selectedProduct.offer || {};
     setSelectedId(selectedProduct._id || selectedProduct.id || '');
@@ -833,6 +841,10 @@ function SupplierOffers({ state, actions }) {
       offerValidFrom: offer.validFrom ? new Date(offer.validFrom).toISOString().slice(0, 10) : '',
       offerValidUntil: offer.validUntil ? new Date(offer.validUntil).toISOString().slice(0, 10) : '',
     });
+  });
+
+  useEffect(() => {
+    synchronizeOfferForm();
   }, [selectedProduct?._id, selectedProduct?.id]);
 
   const updateOffer = (field) => (event) => setOfferForm((current) => ({ ...current, [field]: event.target.value }));
@@ -980,10 +992,14 @@ function SupplierMessages({ state, actions }) {
   const messages = state.supplierMessages || [];
   const selectedThread = messages.find((thread) => getMessageThreadId(thread) === state.selectedSupplierMessageId) || messages[0] || null;
 
-  useEffect(() => {
+  const synchronizeSelectedThread = useEffectEvent(() => {
     if (!state.selectedSupplierMessageId && selectedThread) {
       actions.selectSupplierMessage(selectedThread);
     }
+  });
+
+  useEffect(() => {
+    synchronizeSelectedThread();
   }, [state.selectedSupplierMessageId, selectedThread?._id, selectedThread?.id]);
 
   return (
