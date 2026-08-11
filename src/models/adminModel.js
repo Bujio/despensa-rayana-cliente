@@ -80,12 +80,49 @@ function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function isCanonicalObjectId(value) {
+  return typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
+}
+
+function isSameObjectId(left, right) {
+  return isCanonicalObjectId(left)
+    && isCanonicalObjectId(right)
+    && left.toLowerCase() === right.toLowerCase();
+}
+
+function getCanonicalResponseObjectId(value) {
+  const identifiers = [value?._id, value?.id].filter((identifier) => identifier !== undefined);
+  if (
+    identifiers.length === 0
+    || identifiers.some((identifier) => !isCanonicalObjectId(identifier))
+    || identifiers.some((identifier) => !isSameObjectId(identifier, identifiers[0]))
+  ) return '';
+  return identifiers[0];
+}
+
+function isCanonicalHttpUrl(value) {
+  if (
+    typeof value !== 'string'
+    || value.length === 0
+    || value !== value.trim()
+    || /\s/.test(value)
+  ) return false;
+
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function isCanonicalProductImage(image) {
   return Boolean(
     image
     && typeof image === 'object'
     && !Array.isArray(image)
-    && isNonEmptyString(image.url)
+    && isCanonicalObjectId(image._id)
+    && isCanonicalHttpUrl(image.url)
     && (image.name === undefined || typeof image.name === 'string')
   );
 }
@@ -174,15 +211,7 @@ function normalizeAdminProductMutationResponse(
   result,
   { expectedProductId = '', requireImages = false } = {},
 ) {
-  const rawProductId = result?._id ?? result?.id;
-  const productId = typeof rawProductId === 'string' ? rawProductId : '';
-  const hasConflictingIds = result?._id !== undefined
-    && result?.id !== undefined
-    && (
-      typeof result._id !== 'string'
-      || typeof result.id !== 'string'
-      || result._id !== result.id
-    );
+  const productId = getCanonicalResponseObjectId(result);
   const supplier = result?.supplier;
   const hasCanonicalImages = result?.images === undefined
     || isCanonicalProductImages(result.images);
@@ -191,18 +220,16 @@ function normalizeAdminProductMutationResponse(
   const hasCanonicalProduct = result
     && typeof result === 'object'
     && !Array.isArray(result)
-    && isNonEmptyString(productId)
-    && productId === productId.trim()
-    && !hasConflictingIds
+    && isCanonicalObjectId(productId)
     && (!expectedProductId || (
-      typeof expectedProductId === 'string'
-      && productId === expectedProductId
+      isCanonicalObjectId(expectedProductId)
+      && isSameObjectId(productId, expectedProductId)
     ))
     && isNonEmptyString(result.name)
     && isNonEmptyString(result.sku)
     && typeof result.price === 'number'
     && Number.isFinite(result.price)
-    && result.price >= 0
+    && result.price > 0
     && Number.isSafeInteger(result.stock)
     && result.stock >= 0
     && supplier
