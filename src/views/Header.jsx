@@ -1,5 +1,5 @@
 import { Heart, LogOut, Menu, PackageCheck, Search, Settings, ShoppingBag, UserRound, X } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const commerceSections = [
   'Alimentación',
@@ -16,10 +16,31 @@ const commerceSections = [
 export function Header({ cartCount, busy, filters, session, onCommerceCategory, onFavorites, onLogout, onSearch, onViewChange }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const menuTriggerRef = useRef(null);
+  const menuCloseRef = useRef(null);
+
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    if (menuTriggerRef.current?.isConnected) menuTriggerRef.current.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    menuCloseRef.current?.focus();
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMenu();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [closeMenu, menuOpen]);
 
   const goTo = (nextView) => {
     onViewChange(nextView);
-    setMenuOpen(false);
+    if (menuOpen) closeMenu();
     setAccountOpen(false);
   };
 
@@ -27,7 +48,7 @@ export function Header({ cartCount, busy, filters, session, onCommerceCategory, 
     event.preventDefault();
     const value = new FormData(event.currentTarget).get('search') || '';
     onSearch(value.toString());
-    setMenuOpen(false);
+    if (menuOpen) closeMenu();
   };
 
   return (
@@ -38,7 +59,15 @@ export function Header({ cartCount, busy, filters, session, onCommerceCategory, 
       </div>
 
       <div className="topbar">
-        <button className="mobile-menu-button" type="button" onClick={() => setMenuOpen(true)} aria-label="Abrir menú">
+        <button
+          className="mobile-menu-button"
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Abrir menú"
+          aria-expanded={menuOpen}
+          aria-controls="mobile-menu"
+          ref={menuTriggerRef}
+        >
           <Menu size={21} />
         </button>
 
@@ -97,48 +126,49 @@ export function Header({ cartCount, busy, filters, session, onCommerceCategory, 
         ))}
       </nav>
 
-      <div
-        aria-label="Cerrar menú"
-        className={'mobile-menu-backdrop' + (menuOpen ? ' open' : '')}
-        onClick={() => setMenuOpen(false)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') {
-            event.preventDefault();
-            setMenuOpen(false);
-          }
-        }}
-        role="button"
-        tabIndex={menuOpen ? 0 : -1}
-      />
-      <aside className={'mobile-menu' + (menuOpen ? ' open' : '')} aria-hidden={!menuOpen}>
-        <div className="mobile-menu-head">
-          <strong>La Despensa Rayana</strong>
-          <button className="icon-button" type="button" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú">
-            <X size={18} />
-          </button>
-        </div>
-        <form className="header-search mobile-search" onSubmit={submitSearch} role="search">
-          <Search size={18} />
-          <input name="search" defaultValue={filters?.search || ''} placeholder="Buscar productos..." />
-        </form>
-        <div className="mobile-links">
-          {commerceSections.map((section) => (
-            <button key={section} type="button" onClick={() => {
-              onCommerceCategory(section);
-              setMenuOpen(false);
-            }}>{section}</button>
-          ))}
-        </div>
-        <div className="mobile-access">
-          <button type="button" onClick={() => goTo('account')}>Mi cuenta</button>
-          <button type="button" onClick={() => goTo('orders')}>Mis pedidos</button>
-          <button type="button" onClick={() => {
-            onFavorites();
-            setMenuOpen(false);
-          }}>Favoritos</button>
-          <button type="button" onClick={() => goTo('cart')}>Cesta</button>
-        </div>
-      </aside>
+      {menuOpen && (
+        <>
+          <button
+            aria-label="Cerrar menú"
+            className="mobile-menu-backdrop open"
+            onClick={closeMenu}
+            type="button"
+          />
+          <aside
+            className="mobile-menu open"
+            id="mobile-menu"
+            aria-label="Menú principal"
+          >
+            <div className="mobile-menu-head">
+              <strong>La Despensa Rayana</strong>
+              <button className="icon-button" type="button" onClick={closeMenu} aria-label="Cerrar menú" ref={menuCloseRef}>
+                <X size={18} />
+              </button>
+            </div>
+            <form className="header-search mobile-search" onSubmit={submitSearch} role="search">
+              <Search size={18} />
+              <input name="search" defaultValue={filters?.search || ''} placeholder="Buscar productos..." />
+            </form>
+            <div className="mobile-links">
+              {commerceSections.map((section) => (
+                <button key={section} type="button" onClick={() => {
+                  onCommerceCategory(section);
+                  closeMenu();
+                }}>{section}</button>
+              ))}
+            </div>
+            <div className="mobile-access">
+              <button type="button" onClick={() => goTo('account')}>Mi cuenta</button>
+              <button type="button" onClick={() => goTo('orders')}>Mis pedidos</button>
+              <button type="button" onClick={() => {
+                onFavorites();
+                closeMenu();
+              }}>Favoritos</button>
+              <button type="button" onClick={() => goTo('cart')}>Cesta</button>
+            </div>
+          </aside>
+        </>
+      )}
     </header>
   );
 }

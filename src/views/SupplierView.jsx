@@ -827,25 +827,39 @@ function SupplierOffers({ state, actions }) {
     offerValidFrom: '',
     offerValidUntil: '',
   });
-
-  const synchronizeOfferForm = useEffectEvent(() => {
-    if (!selectedProduct) return;
-    const offer = selectedProduct.offer || {};
-    setSelectedId(selectedProduct._id || selectedProduct.id || '');
-    setOfferForm({
-      offerType: offer.active ? offer.type || 'none' : 'none',
-      offerValue: offer.value ?? '',
-      offerBundleQuantity: offer.bundleQuantity || '3',
-      offerBundlePayQuantity: offer.bundlePayQuantity || '2',
-      offerLabel: offer.label || '',
-      offerValidFrom: offer.validFrom ? new Date(offer.validFrom).toISOString().slice(0, 10) : '',
-      offerValidUntil: offer.validUntil ? new Date(offer.validUntil).toISOString().slice(0, 10) : '',
-    });
-  });
+  const selectedProductId = selectedProduct?._id || selectedProduct?.id || '';
+  const offerActive = selectedProduct?.offer?.active;
+  const offerType = selectedProduct?.offer?.type;
+  const offerValue = selectedProduct?.offer?.value;
+  const offerBundleQuantity = selectedProduct?.offer?.bundleQuantity;
+  const offerBundlePayQuantity = selectedProduct?.offer?.bundlePayQuantity;
+  const offerLabel = selectedProduct?.offer?.label;
+  const offerValidFrom = selectedProduct?.offer?.validFrom;
+  const offerValidUntil = selectedProduct?.offer?.validUntil;
 
   useEffect(() => {
-    synchronizeOfferForm();
-  }, [selectedProduct?._id, selectedProduct?.id]);
+    if (!selectedProductId) return;
+    setSelectedId(selectedProductId);
+    setOfferForm({
+      offerType: offerActive ? offerType || 'none' : 'none',
+      offerValue: offerValue ?? '',
+      offerBundleQuantity: offerBundleQuantity || '3',
+      offerBundlePayQuantity: offerBundlePayQuantity || '2',
+      offerLabel: offerLabel || '',
+      offerValidFrom: offerValidFrom ? new Date(offerValidFrom).toISOString().slice(0, 10) : '',
+      offerValidUntil: offerValidUntil ? new Date(offerValidUntil).toISOString().slice(0, 10) : '',
+    });
+  }, [
+    selectedProductId,
+    offerActive,
+    offerType,
+    offerValue,
+    offerBundleQuantity,
+    offerBundlePayQuantity,
+    offerLabel,
+    offerValidFrom,
+    offerValidUntil,
+  ]);
 
   const updateOffer = (field) => (event) => setOfferForm((current) => ({ ...current, [field]: event.target.value }));
   const selectProduct = (product) => {

@@ -73,16 +73,18 @@ function normalizeSection(section, index) {
   const items = section.type === 'categories' && sectionItems.length === 0
     ? clone(defaultCategoryItems)
     : sectionItems;
+  const productIds = Array.isArray(section.productIds) ? section.productIds.map(String) : [];
+  const { items: _items, productIds: _productIds, ...sectionWithoutLists } = section;
   return {
     body: '',
     ctaLabel: '',
     imageUrl: '',
-    linkUrl: '',
-    subtitle: '',
-    ...section,
-    enabled: section.enabled !== false,
     items,
-    productIds: Array.isArray(section.productIds) ? section.productIds.map(String) : [],
+    linkUrl: '',
+    productIds,
+    subtitle: '',
+    ...sectionWithoutLists,
+    enabled: section.enabled !== false,
     order: Number.isFinite(Number(section.order)) ? Number(section.order) : index,
   };
 }

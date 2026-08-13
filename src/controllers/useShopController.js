@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import {
   apiRequest,
   beginSessionGeneration,
@@ -1732,7 +1732,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     setView('catalog');
   };
 
-  const applyCommerceCategoryFilters = (label) => {
+  const applyCommerceCategoryFilters = useCallback((label) => {
     const visual = categoryVisualModel.findVisual(label);
     const matchedCategories = visual
       ? categories.filter((item) => categoryVisualModel.matches(item, visual))
@@ -1750,11 +1750,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     } else {
       setFilters({ ...emptyFilters, search: label, inStock: true });
     }
-  };
-
-  const applyCommerceCategoryFiltersForEffect = useEffectEvent((label) => {
-    applyCommerceCategoryFilters(label);
-  });
+  }, [categories]);
 
   const openCommerceCategory = (label) => {
     if (label === 'La Rayana') {
@@ -1793,8 +1789,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       return;
     }
 
-    applyCommerceCategoryFiltersForEffect(visual?.label || routeCategorySlug.replace(/-/g, ' '));
-  }, [routeView, routeCategorySlug, categories.length]);
+    applyCommerceCategoryFilters(visual?.label || routeCategorySlug.replace(/-/g, ' '));
+  }, [routeView, routeCategorySlug, applyCommerceCategoryFilters]);
 
   const toggleFavorite = (product) => {
     const productId = getProductId(product);
