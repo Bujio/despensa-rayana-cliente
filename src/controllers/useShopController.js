@@ -558,7 +558,10 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const cancellingOrderIdsRef = useRef(new Set());
   const skipOrderSessionReloadRef = useRef(false);
   const activeProductIdRef = useRef(getProductId(selectedProduct));
-  const productReviewLoadSequenceRef = useRef(0);
+  const activeRouteViewRef = useRef(routeView);
+  const activeRouteProductIdRef = useRef(String(routeProductId || ''));
+  const productDetailLoadSequenceRef = useRef(0);
+  const activeProductDetailIntentRef = useRef(null);
   const productReviewsLoadedForRef = useRef('');
   const productReviewFormContextRef = useRef('');
   const productReviewSubmittingKeysRef = useRef(new Set());
@@ -567,6 +570,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const adminProductsContextRef = useRef(null);
   const adminProductsSnapshotRef = useRef(null);
   const adminProductMutationLocksRef = useRef(new Map());
+
+  activeRouteViewRef.current = routeView;
+  activeRouteProductIdRef.current = String(routeProductId || '');
 
   useEffect(() => {
     const adminProductMutationLocks = adminProductMutationLocksRef.current;
@@ -580,6 +586,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     return () => {
       const activeGeneration = activeSessionGenerationRef.current;
       if (isSessionGenerationActive(activeGeneration)) invalidateSessionGeneration();
+      cancelProductDetailIntent(activeProductDetailIntentRef.current);
       adminProductsLoadSequenceRef.current += 1;
       adminProductsAbortControllerRef.current?.abort();
       adminProductsAbortControllerRef.current = null;
@@ -625,6 +632,11 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     [orders, selectedAdminOrderId],
   );
   const selectedProductId = getProductId(selectedProduct);
+  const selectedProductForCurrentRoute = (
+    routeView === 'product'
+    && routeProductId
+    && selectedProductId !== String(routeProductId)
+  ) ? null : selectedProduct;
   const productReviewOwnerKey = getSessionOwnerKey(session);
   const productReviewSessionKey = productReviewOwnerKey && sessionGeneration
     ? productReviewOwnerKey + '|generation:' + sessionGeneration
@@ -711,6 +723,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       if (nextOwnerKey && currentOwnerKey === nextOwnerKey) skipOrderSessionReloadRef.current = true;
     }
     if (sessionChanged) {
+      cancelProductDetailIntent(activeProductDetailIntentRef.current);
       checkoutSubmittingRef.current = false;
       checkoutSubmissionContextRef.current = null;
       preserveCheckoutDraftRef.current = false;
@@ -846,8 +859,8 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   useEffect(() => {
     if (routeView !== 'product') {
+      cancelProductDetailIntent(activeProductDetailIntentRef.current);
       activeProductIdRef.current = '';
-      productReviewLoadSequenceRef.current += 1;
       productReviewsLoadedForRef.current = '';
       setSelectedProduct(null);
       setProductReviews([]);
@@ -874,14 +887,16 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   }, [page, filters, favoriteIds]);
 
   const loadRouteProductForEffect = useEffectEvent((productId) => {
-    void loadProductFromRoute(productId);
+    return startProductDetailLoad(productId);
   });
 
   useEffect(() => {
     if (routeView === 'product' && routeProductId) {
-      loadRouteProductForEffect(routeProductId);
+      const intent = loadRouteProductForEffect(routeProductId);
+      return () => cancelProductDetailIntent(intent);
     }
-  }, [routeView, routeProductId]);
+    return undefined;
+  }, [routeView, routeProductId, productReviewSessionKey]);
 
   const synchronizeSessionResources = useEffectEvent(() => {
     if (session && !sessionGeneration) return;
@@ -985,84 +1000,109 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     }
   }
 
-  function beginProductReviewContext(productId) {
-    const nextProductId = String(productId || '');
-    if (activeProductIdRef.current === nextProductId) return;
-
-    activeProductIdRef.current = nextProductId;
-    productReviewLoadSequenceRef.current += 1;
-    productReviewsLoadedForRef.current = '';
-    setProductReviews([]);
-    setProductReviewsLoading(Boolean(nextProductId));
-    setProductReviewsLoadedFor('');
-    setProductReviewsLoadError('');
-  }
-
-  async function openProduct(product) {
+  function openProduct(product) {
     const productId = product?._id || product?.id;
     if (!productId) return;
 
-    beginProductReviewContext(productId);
     setSelectedProduct(product);
     setView('product', { productId });
-    setLoadingProductDetail(true);
-    await loadProductReviews(productId);
-    try {
-      const fullProduct = await catalogModel.getProduct(productId);
-      setSelectedProduct(fullProduct);
-      await loadProductReviews(productId);
-    } catch (error) {
-      setNotice(error.message);
-    } finally {
-      setLoadingProductDetail(false);
-    }
   }
 
-  async function loadProductFromRoute(productId) {
-    if (!productId) return;
-    const selectedId = selectedProduct?._id || selectedProduct?.id;
-    if (String(selectedId || '') === String(productId) && selectedProduct?.name) return;
+  function beginProductDetailIntent(productId) {
+    const requestedProductId = String(productId || '');
+    if (!requestedProductId) return null;
 
-    beginProductReviewContext(productId);
+    const previousIntent = activeProductDetailIntentRef.current;
+    previousIntent?.detailController.abort();
+    previousIntent?.reviewController.abort();
+
+    const intent = Object.freeze({
+      detailController: new AbortController(),
+      productId: requestedProductId,
+      reviewController: new AbortController(),
+      routeView: 'product',
+      sequence: productDetailLoadSequenceRef.current + 1,
+      sessionGeneration: activeSessionGenerationRef.current,
+      sessionOwnerKey: getSessionOwnerKey(activeSessionRef.current),
+    });
+
+    productDetailLoadSequenceRef.current = intent.sequence;
+    activeProductDetailIntentRef.current = intent;
+    activeProductIdRef.current = requestedProductId;
+    productReviewsLoadedForRef.current = '';
+    setSelectedProduct((current) => (
+      getProductId(current) === requestedProductId ? current : null
+    ));
     setLoadingProductDetail(true);
+    setProductReviews([]);
+    setProductReviewsLoading(true);
+    setProductReviewsLoadedFor('');
+    setProductReviewsLoadError('');
+    setNotice('');
+    return intent;
+  }
+
+  function isProductDetailIntentCurrent(intent) {
+    return Boolean(
+      intent
+      && activeProductDetailIntentRef.current === intent
+      && productDetailLoadSequenceRef.current === intent.sequence
+      && activeRouteViewRef.current === intent.routeView
+      && activeRouteProductIdRef.current === intent.productId
+      && activeSessionGenerationRef.current === intent.sessionGeneration
+      && getSessionOwnerKey(activeSessionRef.current) === intent.sessionOwnerKey
+    );
+  }
+
+  function cancelProductDetailIntent(intent) {
+    if (!intent || activeProductDetailIntentRef.current !== intent) return;
+    activeProductDetailIntentRef.current = null;
+    productDetailLoadSequenceRef.current += 1;
+    intent.detailController.abort();
+    intent.reviewController.abort();
+  }
+
+  function isIntentionalProductAbort(error, controller) {
+    return controller.signal.aborted && error?.name === 'AbortError';
+  }
+
+  function startProductDetailLoad(productId) {
+    const intent = beginProductDetailIntent(productId);
+    if (!intent) return null;
+    void loadProductForIntent(intent);
+    void loadProductReviewsForIntent(intent);
+    return intent;
+  }
+
+  async function loadProductForIntent(intent) {
     try {
-      const fullProduct = await catalogModel.getProduct(productId);
-      setSelectedProduct(fullProduct);
-      await loadProductReviews(productId);
+      const fullProduct = await catalogModel.getProduct(intent.productId, {
+        signal: intent.detailController.signal,
+      });
+      if (isProductDetailIntentCurrent(intent)) setSelectedProduct(fullProduct);
     } catch (error) {
+      if (isIntentionalProductAbort(error, intent.detailController)) return;
+      if (!isProductDetailIntentCurrent(intent)) return;
       setNotice(error.message);
       setSelectedProduct(null);
     } finally {
-      setLoadingProductDetail(false);
+      if (isProductDetailIntentCurrent(intent)) setLoadingProductDetail(false);
     }
   }
 
-  async function loadProductReviews(productId) {
-    const requestedProductId = String(productId || '');
-    if (!requestedProductId) return;
-    const loadSequence = productReviewLoadSequenceRef.current + 1;
-    productReviewLoadSequenceRef.current = loadSequence;
-    if (productReviewsLoadedForRef.current !== requestedProductId) setProductReviews([]);
-    if (activeProductIdRef.current === requestedProductId) {
-      setProductReviewsLoading(true);
-      setProductReviewsLoadError('');
-    }
-
+  async function loadProductReviewsForIntent(intent) {
     try {
-      const nextReviews = await reviewModel.listProduct(requestedProductId);
-      if (
-        productReviewLoadSequenceRef.current === loadSequence
-        && activeProductIdRef.current === requestedProductId
-      ) {
-        productReviewsLoadedForRef.current = requestedProductId;
+      const nextReviews = await reviewModel.listProduct(intent.productId, {
+        signal: intent.reviewController.signal,
+      });
+      if (isProductDetailIntentCurrent(intent)) {
+        productReviewsLoadedForRef.current = intent.productId;
         setProductReviews(nextReviews);
-        setProductReviewsLoadedFor(requestedProductId);
+        setProductReviewsLoadedFor(intent.productId);
       }
     } catch (error) {
-      if (
-        productReviewLoadSequenceRef.current === loadSequence
-        && activeProductIdRef.current === requestedProductId
-      ) {
+      if (isIntentionalProductAbort(error, intent.reviewController)) return;
+      if (isProductDetailIntentCurrent(intent)) {
         productReviewsLoadedForRef.current = '';
         setNotice(error.message);
         setProductReviews([]);
@@ -1070,10 +1110,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
         setProductReviewsLoadError('No se pudieron cargar las opiniones. Recarga el producto para volver a intentarlo.');
       }
     } finally {
-      if (
-        productReviewLoadSequenceRef.current === loadSequence
-        && activeProductIdRef.current === requestedProductId
-      ) {
+      if (isProductDetailIntentCurrent(intent)) {
         setProductReviewsLoading(false);
       }
     }
@@ -1559,9 +1596,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       setAccountReviewForm({ ...emptyReviewForm });
       await loadMyReviews(operationContext);
       await loadAdminReviews(operationContext);
-      if (selectedProduct?._id || selectedProduct?.id) {
-        await loadProductReviews(selectedProduct._id || selectedProduct.id);
-      }
       if (isSessionContextCurrent(operationContext)) {
         setNotice('Opinión actualizada correctamente.');
       }
@@ -1589,9 +1623,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       }
       await loadMyReviews(operationContext);
       await loadAdminReviews(operationContext);
-      if (selectedProduct?._id || selectedProduct?.id) {
-        await loadProductReviews(selectedProduct._id || selectedProduct.id);
-      }
       if (isSessionContextCurrent(operationContext)) {
         setNotice('Opinión eliminada correctamente.');
       }
@@ -2758,7 +2789,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       products,
       reviewForm,
       reservedBySku,
-      selectedProduct,
+      selectedProduct: selectedProductForCurrentRoute,
       selectedAdminOrder,
       selectedAdminOrderId,
       selectedAdminCategoryId,

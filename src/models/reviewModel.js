@@ -46,8 +46,8 @@ function assertCanonicalReview(review, expected = {}) {
 }
 
 export const reviewModel = {
-  listProduct(productId) {
-    return apiRequest('/reviews/product/' + productId, {}, null).then(getList);
+  listProduct(productId, options = {}) {
+    return apiRequest('/reviews/product/' + productId, options, null).then(getList);
   },
   listMine(request) {
     return request('/reviews/me');

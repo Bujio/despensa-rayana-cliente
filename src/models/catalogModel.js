@@ -9,8 +9,8 @@ export const catalogModel = {
     const result = await apiRequest('/categories?limit=100', {}, null);
     return getList(result);
   },
-  async getProduct(productId) {
-    return apiRequest('/products/' + productId, {}, null);
+  async getProduct(productId, options = {}) {
+    return apiRequest('/products/' + productId, options, null);
   },
   async listProducts({ page, filters, limit = 9 }) {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
