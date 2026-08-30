@@ -45,6 +45,7 @@ export default function App() {
   const controller = useShopController({
     routeCategorySlug: route.categorySlug,
     navigate,
+    routeNavigationKey: location.key,
     routePath: location.pathname,
     routeProductId: route.productId,
     routeView: route.view,

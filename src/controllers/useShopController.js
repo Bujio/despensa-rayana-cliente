@@ -16,6 +16,10 @@ import { homeContentModel } from '../models/homeContentModel.js';
 import { orderModel } from '../models/orderModel.js';
 import { sessionModel } from '../models/sessionModel.js';
 import { emptyReviewForm, reviewModel } from '../models/reviewModel.js';
+import {
+  createProductDetailLoadCoordinator,
+  getProductDetailNavigationIdentity,
+} from './productDetailLoadCoordinator.js';
 
 const initialAuthForm = {
   name: '',
@@ -480,7 +484,14 @@ const hasClientSideFilters = (filters) => Boolean(
   filters.categoryGroupIds?.length,
 );
 
-export function useShopController({ navigate, routeCategorySlug = '', routePath = '/', routeProductId = '', routeView = 'home' } = {}) {
+export function useShopController({
+  navigate,
+  routeCategorySlug = '',
+  routeNavigationKey = '',
+  routePath = '/',
+  routeProductId = '',
+  routeView = 'home',
+} = {}) {
   const [session, setSession] = useState(() => sessionModel.get());
   const [sessionGeneration, setSessionGeneration] = useState(null);
   const [products, setProducts] = useState([]);
@@ -562,6 +573,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const activeRouteProductIdRef = useRef(String(routeProductId || ''));
   const productDetailLoadSequenceRef = useRef(0);
   const activeProductDetailIntentRef = useRef(null);
+  const productDetailLoadCoordinatorRef = useRef(null);
   const productReviewsLoadedForRef = useRef('');
   const productReviewFormContextRef = useRef('');
   const productReviewSubmittingKeysRef = useRef(new Set());
@@ -573,6 +585,9 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   activeRouteViewRef.current = routeView;
   activeRouteProductIdRef.current = String(routeProductId || '');
+  if (!productDetailLoadCoordinatorRef.current) {
+    productDetailLoadCoordinatorRef.current = createProductDetailLoadCoordinator();
+  }
 
   useEffect(() => {
     const adminProductMutationLocks = adminProductMutationLocksRef.current;
@@ -586,7 +601,6 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     return () => {
       const activeGeneration = activeSessionGenerationRef.current;
       if (isSessionGenerationActive(activeGeneration)) invalidateSessionGeneration();
-      cancelProductDetailIntent(activeProductDetailIntentRef.current);
       adminProductsLoadSequenceRef.current += 1;
       adminProductsAbortControllerRef.current?.abort();
       adminProductsAbortControllerRef.current = null;
@@ -641,6 +655,14 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
   const productReviewSessionKey = productReviewOwnerKey && sessionGeneration
     ? productReviewOwnerKey + '|generation:' + sessionGeneration
     : '';
+  const productDetailNavigationIdentity = getProductDetailNavigationIdentity({
+    hasSession: Boolean(session),
+    navigationKey: routeNavigationKey || routePath,
+    productId: routeProductId,
+    routeView,
+    sessionGeneration,
+    sessionOwnerKey: productReviewOwnerKey,
+  });
   const ownProductReview = productReviews.find((review) => isReviewOwnedBySession(review, session));
   const ownProductReviewId = getReviewId(ownProductReview);
 
@@ -723,7 +745,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
       if (nextOwnerKey && currentOwnerKey === nextOwnerKey) skipOrderSessionReloadRef.current = true;
     }
     if (sessionChanged) {
-      cancelProductDetailIntent(activeProductDetailIntentRef.current);
+      productDetailLoadCoordinatorRef.current.cancel();
       checkoutSubmittingRef.current = false;
       checkoutSubmissionContextRef.current = null;
       preserveCheckoutDraftRef.current = false;
@@ -859,7 +881,7 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
 
   useEffect(() => {
     if (routeView !== 'product') {
-      cancelProductDetailIntent(activeProductDetailIntentRef.current);
+      productDetailLoadCoordinatorRef.current.cancel();
       activeProductIdRef.current = '';
       productReviewsLoadedForRef.current = '';
       setSelectedProduct(null);
@@ -886,17 +908,22 @@ export function useShopController({ navigate, routeCategorySlug = '', routePath 
     loadProductsForEffect();
   }, [page, filters, favoriteIds]);
 
-  const loadRouteProductForEffect = useEffectEvent((productId) => {
-    return startProductDetailLoad(productId);
+  const loadRouteProductForEffect = useEffectEvent((productId, navigationIdentity) => {
+    return productDetailLoadCoordinatorRef.current.acquire(navigationIdentity, {
+      cancel: cancelProductDetailIntent,
+      start: () => startProductDetailLoad(productId),
+    });
+  });
+
+  const releaseRouteProductForEffect = useEffectEvent((lease) => {
+    productDetailLoadCoordinatorRef.current.release(lease);
   });
 
   useEffect(() => {
-    if (routeView === 'product' && routeProductId) {
-      const intent = loadRouteProductForEffect(routeProductId);
-      return () => cancelProductDetailIntent(intent);
-    }
-    return undefined;
-  }, [routeView, routeProductId, productReviewSessionKey]);
+    if (!productDetailNavigationIdentity) return undefined;
+    const lease = loadRouteProductForEffect(routeProductId, productDetailNavigationIdentity);
+    return () => releaseRouteProductForEffect(lease);
+  }, [productDetailNavigationIdentity, routeProductId]);
 
   const synchronizeSessionResources = useEffectEvent(() => {
     if (session && !sessionGeneration) return;

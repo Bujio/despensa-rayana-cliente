@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "audit": "npm audit --audit-level=moderate",
+    "test:h13": "node --test tests/h13-product-detail-navigation.test.js",
     "seed:extremadura": "node scripts/seed-extremadura-products.mjs"
   },
   "dependencies": {
