@@ -9,9 +9,10 @@ export function getProductDetailNavigationIdentity({
   routeView = '',
   sessionGeneration = null,
   sessionOwnerKey = '',
+  suppressLoad = false,
 } = {}) {
   const normalizedProductId = String(productId || '');
-  if (routeView !== 'product' || !normalizedProductId) return '';
+  if (suppressLoad || routeView !== 'product' || !normalizedProductId) return '';
 
   if (hasSession) {
     if (!sessionOwnerKey || !Number.isSafeInteger(sessionGeneration)) return '';
@@ -28,6 +29,70 @@ export function getProductDetailNavigationIdentity({
     normalizedProductId,
     'anonymous',
   ]);
+}
+
+function getProductRouteVisitIdentity({
+  navigationKey = '',
+  productId = '',
+  routeView = '',
+} = {}) {
+  const normalizedProductId = String(productId || '');
+  if (routeView !== 'product' || !normalizedProductId) return '';
+  return JSON.stringify([String(navigationKey || 'default'), normalizedProductId]);
+}
+
+export function createProductDetailRouteExitTransition() {
+  let exitingVisitIdentity = '';
+
+  return Object.freeze({
+    begin({ navigationKey = '', productId = '', routeView = '', targetView = '' } = {}) {
+      if (targetView === 'product') return false;
+      const visitIdentity = getProductRouteVisitIdentity({ navigationKey, productId, routeView });
+      if (!visitIdentity) return false;
+      exitingVisitIdentity = visitIdentity;
+      return true;
+    },
+
+    cancel() {
+      exitingVisitIdentity = '';
+    },
+
+    complete(routeView) {
+      if (routeView !== 'product') exitingVisitIdentity = '';
+    },
+
+    suppresses(routeContext) {
+      const visitIdentity = getProductRouteVisitIdentity(routeContext);
+      return Boolean(exitingVisitIdentity && exitingVisitIdentity === visitIdentity);
+    },
+  });
+}
+
+export function runProductDetailLogoutTransition({
+  clearSession,
+  currentRoute,
+  navigateToCatalog,
+  routeExitTransition,
+} = {}) {
+  if (
+    typeof clearSession !== 'function'
+    || typeof navigateToCatalog !== 'function'
+    || !routeExitTransition
+  ) return false;
+
+  const exitStarted = routeExitTransition.begin({
+    ...currentRoute,
+    targetView: 'catalog',
+  });
+
+  try {
+    clearSession();
+    navigateToCatalog();
+    return exitStarted;
+  } catch (error) {
+    if (exitStarted) routeExitTransition.cancel();
+    throw error;
+  }
 }
 
 export function createProductDetailLoadCoordinator({
